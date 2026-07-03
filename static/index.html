@@ -518,7 +518,8 @@ function drawScope(td){
   let tMin=255, tMax=0;
   for(let i=si;i<si+n&&i<td.length;i++){ if(td[i]<tMin)tMin=td[i]; if(td[i]>tMax)tMax=td[i]; }
   const tRange=Math.max(tMax-tMin,4);
-  function sy(s){ return H*0.03 + ((tMax-s)/tRange)*H*0.94; }
+  const tMid=(tMax+tMin)/2;
+  function sy(s){ return H/2 - ((s-tMid)/tRange)*H*0.88; }
 
   const COL=['#22d3ee','#f97316','#38bdf8','#4ade80'][pal];
   const COL2=['rgba(34,211,238,','rgba(249,115,22,','rgba(56,189,248,','rgba(74,222,128,'][pal];
@@ -553,12 +554,15 @@ function drawScope(td){
     }
     if(pts.length>1){
       const NUM_LINES=30, SPREAD=H*0.35;
-      c.shadowBlur=glow; c.shadowColor=COL;
+      const baseHue=(Date.now()/60)%360;
       for(let l=0;l<NUM_LINES;l++){
         const t=l/(NUM_LINES-1);
         const yOff=(t-0.5)*SPREAD;
         const ctr=1-Math.abs(t-0.5)*2;
         const alpha=0.08+ctr*0.55;
+        const hue=(baseHue+t*60)%360;
+        const lineCol=`hsla(${hue},100%,65%,${alpha.toFixed(2)})`;
+        c.shadowBlur=glow*ctr; c.shadowColor=`hsl(${hue},100%,60%)`;
         c.beginPath();
         c.moveTo(pts[0][0], pts[0][1]+yOff);
         for(let i=1;i<pts.length-1;i++){
@@ -567,7 +571,7 @@ function drawScope(td){
           c.quadraticCurveTo(pts[i][0],pts[i][1]+yOff,mx,my);
         }
         c.lineTo(pts[pts.length-1][0],pts[pts.length-1][1]+yOff);
-        c.strokeStyle=COL2+alpha.toFixed(2)+')';
+        c.strokeStyle=lineCol;
         c.lineWidth=0.6;
         c.stroke();
       }
