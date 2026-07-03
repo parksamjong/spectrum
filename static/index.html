@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Spectrum Analyzer Pro — AI Dashboard</title>
+<style>
+:root{
+  --bg:#0d1b2e;--panel:#112240;--border:#1e3a5f;
+  --c:#00eeff;--m:#ee55ff;--g:#55ff44;--y:#ffee22;--r:#ff2244;
+  --txt:#aac8e8;--hi:#eef6ff;--rad:6px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--hi);font-family:'Courier New',monospace;font-size:12px;}
+
+/* LAYOUT */
+#app{display:grid;grid-template-rows:40px 1fr;grid-template-columns:186px 1fr 250px;height:100vh;transition:grid-template-columns .2s;}
+#app.hide-side{grid-template-columns:0px 1fr 250px;}
+#app.hide-ai{grid-template-columns:186px 1fr 0px;}
+#app.hide-side.hide-ai{grid-template-columns:0px 1fr 0px;}
+#hdr{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);}
+#side{overflow-y:auto;overflow-x:hidden;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:5px;padding:8px 6px;transition:all .2s;white-space:nowrap;}
+#app.hide-side #side{padding:0;border:none;}
+#main{display:grid;grid-template-rows:3fr 1fr;overflow:hidden;}
+#bToggle{font-size:14px;padding:2px 7px;line-height:1;}
+#sw{position:relative;overflow:hidden;}
+#ow{border-top:1px solid var(--border);position:relative;overflow:hidden;}
+canvas{display:block;width:100%;height:100%;}
+
+/* HEADER */
+#logo{font-size:12px;letter-spacing:3px;color:var(--c);text-shadow:0 0 10px var(--c);white-space:nowrap;margin-right:4px;}
+.hb{background:transparent;color:var(--txt);border:1px solid var(--border);padding:4px 10px;cursor:pointer;border-radius:var(--rad);font-family:inherit;font-size:11px;letter-spacing:1px;transition:all .15s;white-space:nowrap;}
+.hb:hover{color:var(--hi);border-color:#2a2a50;}
+.hb.on{color:var(--c);border-color:var(--c);background:#031218;box-shadow:0 0 8px #00e5ff33;}
+.hgap{flex:1;}
+#stat{font-size:10px;color:var(--txt);letter-spacing:1px;min-width:160px;text-align:right;}
+input[type=file]{display:none;}
+
+/* SIDE PANEL */
+.sec{border:1px solid var(--border);border-radius:var(--rad);padding:7px 6px;background:#1e2d4a;}
+.stit{font-size:9px;color:var(--txt);letter-spacing:2px;margin-bottom:6px;text-transform:uppercase;}
+.row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:4px;}
+.row label{color:var(--txt);font-size:9px;letter-spacing:1px;white-space:nowrap;}
+.rv{color:var(--c);font-size:9px;min-width:28px;text-align:right;}
+input[type=range]{flex:1;height:2px;cursor:pointer;-webkit-appearance:none;appearance:none;background:var(--border);border-radius:2px;outline:none;border:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--c);box-shadow:0 0 5px var(--c);cursor:pointer;}
+select{flex:1;background:#1e2d4a;color:var(--hi);border:1px solid var(--border);padding:2px 4px;border-radius:3px;font-family:inherit;font-size:10px;cursor:pointer;}
+select:focus{outline:none;border-color:var(--c);}
+.pal{display:flex;gap:3px;margin-top:2px;}
+.pb{flex:1;height:16px;border-radius:3px;border:2px solid transparent;cursor:pointer;transition:.13s;}
+.pb.on{border-color:#fff;transform:scaleY(1.15);}
+.vu{display:flex;flex-direction:column;gap:3px;margin-top:3px;}
+.vr{display:flex;align-items:center;gap:4px;}
+.vl{width:10px;font-size:9px;color:var(--txt);}
+.vb{flex:1;height:6px;background:var(--border);border-radius:2px;overflow:hidden;position:relative;}
+.vf{height:100%;width:0%;border-radius:2px;}
+.vp{position:absolute;top:0;width:2px;height:100%;background:#fff;opacity:.75;}
+#inf{font-size:9px;color:var(--txt);margin-top:4px;line-height:1.8;}
+#inf span{color:var(--c);}
+
+/* HZ TOOLTIP */
+#hz-tip{position:absolute;pointer-events:none;display:none;background:rgba(1,1,9,.9);border:1px solid var(--c);border-radius:4px;padding:3px 8px;font-size:10px;color:var(--c);letter-spacing:1px;white-space:nowrap;z-index:10;top:8px;}
+
+/* AI PANEL */
+#ai{overflow-y:auto;overflow-x:hidden;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;gap:6px;padding:10px 8px;transition:all .2s;white-space:nowrap;}
+#app.hide-ai #ai{padding:0;border:none;}
+.ai-hdr{font-size:9px;letter-spacing:3px;color:var(--c);text-shadow:0 0 8px var(--c);padding-bottom:6px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.ai-card{border:1px solid var(--border);border-radius:var(--rad);padding:8px;background:#1e2d4a;flex-shrink:0;}
+.ai-card-lbl{font-size:8px;color:var(--txt);letter-spacing:2px;text-transform:uppercase;margin-bottom:5px;}
+.ai-genre-val{font-size:18px;color:var(--c);letter-spacing:2px;font-weight:bold;transition:color .5s,text-shadow .5s;}
+.ai-tags{display:flex;flex-wrap:wrap;gap:3px;min-height:18px;}
+.ai-tag{font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid #5a2a7a;color:var(--m);background:#2e1a4a;letter-spacing:1px;}
+.ai-desc-txt{font-size:10px;color:var(--txt);line-height:1.7;}
+.ai-prof-txt{font-size:8px;color:#3a3a5a;line-height:1.6;word-break:break-all;}
+.ai-status-row{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--txt);}
+#ai-dot{font-size:9px;transition:color .3s;}
+#ai-dot.idle{color:#282838;}
+#ai-dot.ok{color:var(--g);animation:aidot 2s infinite;}
+#ai-dot.busy{color:var(--y);animation:aidot .5s infinite;}
+#ai-dot.err{color:var(--r);}
+@keyframes aidot{0%,100%{opacity:1;}50%{opacity:.2;}}
+.ai-btn{background:transparent;color:var(--txt);border:1px solid var(--border);padding:5px 8px;cursor:pointer;border-radius:var(--rad);font-family:inherit;font-size:9px;letter-spacing:1px;text-align:center;transition:all .15s;width:100%;flex-shrink:0;}
+.ai-btn:hover{color:var(--hi);border-color:#2a2a50;}
+.ai-btn.on{color:var(--c);border-color:var(--c);background:#031218;}
+#ai-count{font-size:8px;color:#222232;text-align:center;margin-top:auto;padding-top:4px;flex-shrink:0;}
+
+/* 이상감지 */
+.threat-bar{height:4px;border-radius:2px;margin-bottom:4px;transition:background .4s,box-shadow .4s;}
+.threat-bar.normal  {background:#1a3a1a;box-shadow:none;}
+.threat-bar.warning {background:var(--y);box-shadow:0 0 8px var(--y);animation:threatpulse 1.5s infinite;}
+.threat-bar.critical{background:var(--r);box-shadow:0 0 12px var(--r);animation:threatpulse .7s infinite;}
+@keyframes threatpulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+#anomaly-card.warning{border-color:var(--y);}
+#anomaly-card.critical{border-color:var(--r);}
+.anomaly-item{font-size:9px;color:var(--r);padding:2px 0;border-bottom:1px solid #1a0a0a;display:flex;align-items:flex-start;gap:4px;}
+.anomaly-item:last-child{border-bottom:none;}
+#threat-icon{font-size:9px;color:var(--g);transition:color .3s;}
+#threat-icon.warning{color:var(--y);}
+#threat-icon.critical{color:var(--r);animation:threatpulse .7s infinite;}
+
+/* GUIDE MODAL */
+#guide{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#080818;border:1px solid var(--c);border-radius:10px;padding:22px 28px;z-index:9999;min-width:320px;font-size:11px;line-height:2.2;}
+#guide h3{color:var(--c);letter-spacing:3px;font-size:13px;margin-bottom:10px;}
+#guide .step b{color:var(--y);}
+#guide .step span{color:var(--g);}
+#guide .note{font-size:9px;color:#446;margin-top:8px;}
+#guide button{margin-top:12px;background:#041520;border:1px solid var(--c);color:var(--c);padding:5px 18px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HEADER -->
+<div id="hdr">
+  <button class="hb" id="bToggle" title="파라미터 패널 숨기기/보이기">◀</button>
+  <div id="logo">◈ SPECTRUM PRO</div>
+  <button class="hb" id="bSys">🖥 시스템</button>
+  <button class="hb" id="bMic">🎤 마이크</button>
+  <button class="hb" id="bFile">📁 파일</button>
+  <input type="file" id="fi" accept="audio/*,video/*">
+  <button class="hb" id="bTest">🎵 테스트</button>
+  <button class="hb" id="bStop" style="display:none">⏹ 정지</button>
+  <div class="hgap"></div>
+  <button class="hb" id="bToggleAI" title="AI 패널 숨기기/보이기">AI ▶</button>
+  <button class="hb" id="bFullscreen">⛶ 전체화면</button>
+  <div id="stat">소스를 선택하세요</div>
+</div>
+
+<!-- LEFT: 파라미터 패널 -->
+<div id="side">
+  <div class="sec">
+    <div class="stit">스펙트럼</div>
+    <div class="row"><label>FFT</label>
+      <select id="fft">
+        <option value="2048">2048</option>
+        <option value="4096">4096</option>
+        <option value="8192">8192</option>
+        <option value="16384" selected>16384</option>
+      </select>
+    </div>
+    <div class="row"><label>SMOOTH</label><input type="range" id="sm" min="0" max="97" value="80"><span class="rv" id="vsm">80</span></div>
+    <div class="row"><label>GAIN</label><input type="range" id="gn" min="1" max="40" value="12"><span class="rv" id="vgn">12</span></div>
+    <div class="row"><label>MIN dB</label><input type="range" id="md" min="-120" max="-40" value="-90" step="5"><span class="rv" id="vmd">-90</span></div>
+    <div class="row"><label>MODE</label>
+      <select id="sm2">
+        <option value="bar">BAR</option>
+        <option value="line">LINE</option>
+        <option value="mirror">MIRROR</option>
+        <option value="dot">DOT</option>
+      </select>
+    </div>
+    <div class="row"><label>PEAK</label>
+      <select id="ph">
+        <option value="60">60f</option>
+        <option value="120" selected>120f</option>
+        <option value="240">240f</option>
+        <option value="0">OFF</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="stit">컬러</div>
+    <div class="pal">
+      <div class="pb on" id="p0" style="background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f)"></div>
+      <div class="pb" id="p1" style="background:linear-gradient(90deg,#000,#f60,#ff0,#fff)"></div>
+      <div class="pb" id="p2" style="background:linear-gradient(90deg,#001,#04f,#0ff,#fff)"></div>
+      <div class="pb" id="p3" style="background:linear-gradient(90deg,#000,#0f0,#aff,#fff)"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="stit">오실로스코프</div>
+    <div class="row"><label>TIME</label>
+      <select id="td">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+      </select>
+    </div>
+    <div class="row"><label>TRIG</label><input type="range" id="tl" min="0" max="100" value="50"><span class="rv" id="vtl">50</span></div>
+    <div class="row"><label>WIDTH</label><input type="range" id="lw" min="1" max="5" value="2" step=".5"><span class="rv" id="vlw">2</span></div>
+    <div class="row"><label>GLOW</label><input type="range" id="sg" min="0" max="30" value="14"><span class="rv" id="vsg">14</span></div>
+    <div class="row"><label>STYLE</label>
+      <select id="ss">
+        <option value="line">VECTOR</option>
+        <option value="fill">FILL</option>
+        <option value="dot">DOT</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="stit">레벨 미터</div>
+    <div class="vu">
+      <div class="vr"><span class="vl">L</span><div class="vb"><div class="vf" id="vfl"></div><div class="vp" id="vpl"></div></div></div>
+      <div class="vr"><span class="vl">R</span><div class="vb"><div class="vf" id="vfr"></div><div class="vp" id="vpr"></div></div></div>
+    </div>
+    <div id="inf">피크: <span id="ipf">—</span><br>레벨: <span id="ilv">—</span><br>RMS: <span id="irs">—</span></div>
+  </div>
+</div>
+
+<!-- CENTER: 스펙트럼 + 오실로스코프 -->
+<div id="main">
+  <div id="sw">
+    <canvas id="sc"></canvas>
+    <div id="hz-tip"></div>
+  </div>
+  <div id="ow"><canvas id="oc"></canvas></div>
+</div>
+
+<!-- RIGHT: AI 분석 패널 -->
+<div id="ai">
+  <div class="ai-hdr">◈ AI ANALYSIS</div>
+
+  <div class="ai-card">
+    <div class="ai-card-lbl">GENRE</div>
+    <div class="ai-genre-val" id="ai-genre">—</div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-card-lbl">INSTRUMENTS</div>
+    <div class="ai-tags" id="ai-instr">
+      <span style="color:#222;font-size:9px">분석 대기</span>
+    </div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-card-lbl">AI 설명</div>
+    <div class="ai-desc-txt" id="ai-desc">소스를 선택 후 분석하세요</div>
+  </div>
+
+  <!-- 이상감지 카드 -->
+  <div class="ai-card" id="anomaly-card">
+    <div class="ai-card-lbl">
+      <span id="threat-icon">◉</span> ANOMALY DETECTION
+    </div>
+    <div id="ai-threat-bar" class="threat-bar normal"></div>
+    <div id="ai-threat-detail" class="ai-desc-txt" style="margin-top:4px">정상 — 이상 없음</div>
+    <div id="ai-anomalies" style="margin-top:5px"></div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-card-lbl">FREQ PROFILE</div>
+    <div class="ai-prof-txt" id="ai-prof">—</div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-status-row">
+      <span id="ai-dot" class="idle">●</span>
+      <span id="ai-stat">API 대기</span>
+    </div>
+  </div>
+
+  <button class="ai-btn" id="bAnalyzeNow">⚡ 즉시 분석</button>
+  <button class="ai-btn" id="bAutoAnalyze">🔄 자동 분석: OFF</button>
+
+  <div id="ai-count">분석 0회</div>
+</div>
+
+</div><!-- /#app -->
+
+<!-- 시스템 오디오 안내 -->
+<div id="guide">
+  <h3>시스템 오디오 캡처</h3>
+  <div class="step">① <b>전체 화면</b> 탭 선택</div>
+  <div class="step">② 하단 <span>시스템 오디오 공유</span> 토글 ON</div>
+  <div class="step">③ <b>공유</b> 클릭</div>
+  <div class="note">⚠ Chrome/Edge 전용 · 소리 재생 없이 분석만 수행됩니다</div>
+  <button onclick="document.getElementById('guide').style.display='none';doCapture()">시작</button>
+</div>
+
+<script>
+// ── 상수
+const NUM=1024, FMIN=20, FMAX=20000;
+let actx, an, src, swId, vuPL=0, vuPR=0;
+let pal=0;
+const peaks=new Float32Array(NUM), phc=new Int32Array(NUM);
+
+// ── AI 전역
+let lastVals=null, lastRmsGlobal=0, analyzeCount=0;
+let autoAnalyze=false, analyzeTimer=null;
+const AI_INTERVAL=8000; // 8초마다 자동 분석
+
+const sc=document.getElementById('sc'), oc=document.getElementById('oc');
+const sctx=sc.getContext('2d'), octx=oc.getContext('2d');
+const BFREQ=Array.from({length:NUM+1},(_,i)=>FMIN*Math.pow(FMAX/FMIN,i/NUM));
+
+// 주파수 레이블 (더 촘촘하게)
+const FLBL=[
+  [20,'20'],[30,'30'],[50,'50'],[80,'80'],
+  [100,'100'],[150,'150'],[200,'200'],[300,'300'],
+  [500,'500'],[800,'800'],[1000,'1k'],[1500,'1.5k'],
+  [2000,'2k'],[3000,'3k'],[5000,'5k'],[8000,'8k'],
+  [10000,'10k'],[16000,'16k'],[20000,'20k']
+];
+
+// 하단 주파수 대역 이름
+const FREQ_BANDS=[
+  [20,  250, 'SUB / BASS'],
+  [250, 2000,'MID'],
+  [2000,8000,'HIGH-MID'],
+  [8000,20000,'AIR']
+];
+
+function resize(){
+  const sw=document.getElementById('sw'), ow=document.getElementById('ow');
+  sc.width=sw.clientWidth; sc.height=sw.clientHeight;
+  oc.width=ow.clientWidth; oc.height=ow.clientHeight;
+}
+resize();
+new ResizeObserver(resize).observe(document.getElementById('main'));
+
+// 슬라이더 라이브 라벨
+[['sm','vsm'],['gn','vgn'],['md','vmd'],['tl','vtl'],['lw','vlw'],['sg','vsg']].forEach(([id,vid])=>{
+  const el=document.getElementById(id), lb=document.getElementById(vid);
+  if(el&&lb) el.addEventListener('input',()=>lb.textContent=el.value);
+});
+
+// 팔레트
+function gc(i,a=1,l=72){
+  const t=i/(NUM-1);
+  if(pal===0) return `hsla(${t*270},100%,${l}%,${a})`;
+  if(pal===1) return `hsla(${t*60},100%,${Math.round(55+t*30)}%,${a})`;
+  if(pal===2) return `hsla(${Math.round(200+t*40)},100%,${Math.round(60+t*25)}%,${a})`;
+  return `hsla(120,100%,${Math.round(45+t*40)}%,${a})`;
+}
+document.querySelectorAll('.pb').forEach((b,i)=>{
+  b.addEventListener('click',()=>{
+    pal=i;
+    document.querySelectorAll('.pb').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+  });
+});
+
+// 밴드 계산
+function bands(data,sr){
+  const ny=sr/2, n=data.length;
+  return Float32Array.from({length:NUM},(_,i)=>{
+    const f1=BFREQ[i], f2=BFREQ[i+1];
+    const b1=Math.max(0,Math.floor(f1/ny*n));
+    const b2=Math.min(n-1,Math.ceil(f2/ny*n));
+    let mx=0; for(let b=b1;b<=b2;b++) mx=Math.max(mx,data[b]);
+    return mx/255;
+  });
+}
+
+function f2x(f,W){
+  const idx=Math.log(f/FMIN)/Math.log(FMAX/FMIN)*(NUM-1);
+  return 1+idx*(W-2)/NUM+(W-2)/NUM/2;
+}
+
+// 커서 Hz 추적
+let cursorHz=null;
+const hzTip=document.getElementById('hz-tip');
+sc.addEventListener('mousemove',e=>{
+  const rect=sc.getBoundingClientRect();
+  const ratio=(e.clientX-rect.left)/rect.width;
+  const hz=Math.round(FMIN*Math.pow(FMAX/FMIN,Math.max(0,Math.min(1,ratio))));
+  cursorHz=hz;
+  hzTip.textContent=hz>=1000?(hz/1000).toFixed(1)+'kHz':hz+'Hz';
+  hzTip.style.display='block';
+  const px=e.clientX-rect.left;
+  hzTip.style.left=Math.min(px+10, rect.width-70)+'px';
+});
+sc.addEventListener('mouseleave',()=>{ cursorHz=null; hzTip.style.display='none'; });
+
+// 스펙트럼 그리기
+function drawSpec(vals){
+  const c=sctx, W=sc.width, H=sc.height;
+  const mode=document.getElementById('sm2').value;
+  const phf=parseInt(document.getElementById('ph').value);
+  // 하단 여백 증가: 대역명 + Hz 레이블 공간
+  const FOOT=46, TOP=6, pH=H-FOOT-TOP;
+  const bw=(W-2)/NUM, gap=Math.max(.8,bw*.1), bW=bw-gap;
+
+  c.fillStyle='#0a1628'; c.fillRect(0,0,W,H);
+
+  // 수평 그리드
+  c.setLineDash([1,6]); c.strokeStyle='#1e4070'; c.lineWidth=1;
+  for(let d=0;d<=100;d+=20){
+    const y=TOP+pH*(1-d/100);
+    c.beginPath(); c.moveTo(0,y); c.lineTo(W,y); c.stroke();
+    c.fillStyle='#4a80c0'; c.font='9px Courier New'; c.textAlign='left';
+    c.fillText(d+'%',2,y-2);
+  }
+  // 수직 주파수 가이드
+  for(const [f] of FLBL){
+    const x=f2x(f,W);
+    c.strokeStyle='#1e3a60';
+    c.beginPath(); c.moveTo(x,TOP); c.lineTo(x,H-FOOT); c.stroke();
+  }
+  c.setLineDash([]);
+
+  // 파형 그리기
+  if(mode==='line'){
+    c.save();
+    c.beginPath(); c.moveTo(1,TOP+pH);
+    for(let i=0;i<NUM;i++) c.lineTo(1+i*bw+bW/2, TOP+pH-vals[i]*pH);
+    c.lineTo(W-1,TOP+pH); c.closePath();
+    const gf=c.createLinearGradient(0,TOP,0,TOP+pH);
+    gf.addColorStop(0,gc(60,.4)); gf.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle=gf; c.fill();
+    c.beginPath();
+    for(let i=0;i<NUM;i++){
+      const x=1+i*bw+bW/2;
+      i?c.lineTo(x,TOP+pH-vals[i]*pH):c.moveTo(x,TOP+pH-vals[i]*pH);
+    }
+    c.shadowBlur=15; c.shadowColor=gc(60); c.strokeStyle=gc(60); c.lineWidth=2; c.stroke();
+    c.shadowBlur=0; c.restore();
+  } else if(mode==='mirror'){
+    const my=TOP+pH/2;
+    for(let i=0;i<NUM;i++){
+      const x=1+i*bw, h=vals[i]*pH/2; if(h<.5) continue;
+      c.shadowBlur=14; c.shadowColor=gc(i,.9);
+      const gm=c.createLinearGradient(0,my-h,0,my+h);
+      gm.addColorStop(0,gc(i,1,75)); gm.addColorStop(.5,gc(i,.7,48)); gm.addColorStop(1,gc(i,1,75));
+      c.fillStyle=gm; c.fillRect(x,my-h,bW,h*2);
+    }
+    c.shadowBlur=0;
+  } else if(mode==='dot'){
+    for(let i=0;i<NUM;i++){
+      const x=1+i*bw+bW/2, steps=Math.floor(vals[i]*pH/5);
+      for(let s=0;s<steps;s++){
+        const y=TOP+pH-s*5, a=.4+.6*(s/steps);
+        c.fillStyle=gc(i,a); c.shadowBlur=5; c.shadowColor=gc(i);
+        c.beginPath(); c.arc(x,y,Math.max(1.4,bW/3),0,Math.PI*2); c.fill();
+      }
+    }
+    c.shadowBlur=0;
+  } else {
+    // BAR
+    for(let i=0;i<NUM;i++){
+      const x=1+i*bw, bH=Math.max(0,vals[i]*pH), y=TOP+pH-bH;
+      if(phf>0){
+        if(vals[i]>peaks[i]){ peaks[i]=vals[i]; phc[i]=phf; }
+        else if(phc[i]>0) phc[i]--;
+        else peaks[i]=Math.max(0,peaks[i]-.009);
+      }
+      if(bH<.5) continue;
+      c.shadowBlur=bH>8?28:10; c.shadowColor=gc(i,1);
+      const gb=c.createLinearGradient(0,y,0,TOP+pH);
+      gb.addColorStop(0,gc(i,1,92)); gb.addColorStop(.25,gc(i,1,75));
+      gb.addColorStop(.7,gc(i,.9,55)); gb.addColorStop(1,gc(i,.4,35));
+      c.fillStyle=gb; c.fillRect(x,y,bW,bH);
+      c.fillStyle=gc(i,.7,98); c.fillRect(x,y,bW,Math.min(3,bH*.15));
+      if(phf>0&&peaks[i]>.02){
+        const py=TOP+pH-peaks[i]*pH;
+        c.shadowBlur=9; c.shadowColor=gc(i,1,92);
+        c.fillStyle=gc(i,.92,92); c.fillRect(x,py,bW,2);
+      }
+    }
+    c.shadowBlur=0;
+  }
+
+  // ── 하단: 주파수 대역 이름 라인
+  const BAND_ROW=H-FOOT+2;
+  for(const [f1,f2,name] of FREQ_BANDS){
+    const x1=f2x(f1,W), x2=f2x(f2,W);
+    // 배경
+    c.fillStyle='#1e2d4a';
+    c.fillRect(x1+1,BAND_ROW,x2-x1-2,14);
+    // 구분선
+    c.fillStyle='#2a3a5c';
+    c.fillRect(x1,BAND_ROW,1,14);
+    // 텍스트
+    c.fillStyle='#6080b0';
+    c.font='bold 8px Courier New';
+    c.textAlign='center';
+    c.fillText(name,(x1+x2)/2,BAND_ROW+10);
+  }
+  // 오른쪽 끝 구분선
+  c.fillStyle='#2a3a5c'; c.fillRect(W-1,BAND_ROW,1,14);
+
+  // ── 하단: Hz 눈금 + 레이블
+  c.font='9px Courier New'; c.textAlign='center';
+  for(const [f,lb] of FLBL){
+    const bi=(Math.log(f/FMIN)/Math.log(FMAX/FMIN))*(NUM-1);
+    const x=f2x(f,W);
+    // 눈금선
+    c.fillStyle=gc(bi,.25,40);
+    c.fillRect(x-.5,BAND_ROW-3,1,4);
+    // 레이블
+    c.fillStyle=gc(bi,.9,68);
+    c.fillText(lb,x,H-FOOT+30);
+  }
+
+  // ── 커서 위치 Hz 수직선
+  if(cursorHz!==null){
+    const cx=f2x(cursorHz,W);
+    c.setLineDash([2,5]);
+    c.strokeStyle='rgba(192,208,232,0.2)';
+    c.lineWidth=1;
+    c.beginPath(); c.moveTo(cx,TOP); c.lineTo(cx,TOP+pH); c.stroke();
+    c.setLineDash([]);
+  }
+
+  // 피크 주파수 표시
+  let pk=0;
+  for(let i=1;i<NUM;i++) if(vals[i]>vals[pk]) pk=i;
+  const pf=Math.round(Math.sqrt(BFREQ[pk]*BFREQ[pk+1]));
+  document.getElementById('ipf').textContent=pf<1000?pf+'Hz':(pf/1000).toFixed(2)+'kHz';
+  document.getElementById('ilv').textContent=(vals[pk]*100).toFixed(1)+'%';
+}
+
+// 오실로스코프 그리기
+function drawScope(td){
+  const c=octx, W=oc.width, H=oc.height;
+  const tDiv=parseFloat(document.getElementById('td').value);
+  const trigLv=parseInt(document.getElementById('tl').value)/100;
+  const lw=parseFloat(document.getElementById('lw').value);
+  const glow=parseInt(document.getElementById('sg').value);
+  const style=document.getElementById('ss').value;
+
+  c.fillStyle='rgba(10,22,40,.55)'; c.fillRect(0,0,W,H);
+  c.strokeStyle='#2a3a5c'; c.lineWidth=1; c.setLineDash([2,6]);
+  for(let i=1;i<4;i++){
+    c.beginPath(); c.moveTo(W*i/4,0); c.lineTo(W*i/4,H); c.stroke();
+  }
+  c.beginPath(); c.moveTo(0,H/2); c.lineTo(W,H/2); c.stroke();
+  c.setLineDash([]);
+  const ty=H*(1-trigLv);
+  c.strokeStyle='rgba(255,220,3,.2)'; c.lineWidth=1; c.setLineDash([4,8]);
+  c.beginPath(); c.moveTo(0,ty); c.lineTo(W,ty); c.stroke(); c.setLineDash([]);
+
+  const n=Math.min(td.length,Math.floor(td.length/tDiv));
+  let si=0;
+  for(let i=1;i<n-1;i++){
+    if((td[i-1]+128)/256<trigLv&&(td[i]+128)/256>=trigLv){ si=i; break; }
+  }
+
+  const col=pal===0?'#00e5ff':pal===1?'#ff6600':pal===2?'#00aaff':'#00ff66';
+  const gc2=pal===0?'rgba(0,229,255,':pal===1?'rgba(255,102,0,':pal===2?'rgba(0,170,255,':'rgba(0,255,102,';
+  c.shadowBlur=glow; c.shadowColor=col;
+
+  if(style==='dot'){
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      const v=(td[idx]+128)/256, y=H-v*H+H/2;
+      c.fillStyle=gc2+(0.4+v*.5)+')'; c.fillRect(i,y,lw,lw);
+    }
+  } else if(style==='fill'){
+    c.beginPath(); c.moveTo(0,H);
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      const y=H-((td[idx]+128)/256)*H+H/2;
+      i===0?c.moveTo(0,y):c.lineTo(i,y);
+    }
+    c.lineTo(W,H); c.closePath();
+    const fg=c.createLinearGradient(0,0,0,H);
+    fg.addColorStop(0,gc2+'.35)'); fg.addColorStop(1,gc2+'0)');
+    c.fillStyle=fg; c.fill();
+    c.beginPath();
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      const y=H-((td[idx]+128)/256)*H+H/2;
+      i===0?c.moveTo(0,y):c.lineTo(i,y);
+    }
+    c.strokeStyle=col; c.lineWidth=lw; c.stroke();
+  } else {
+    c.beginPath();
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      const y=H-((td[idx]+128)/256)*H+H/2;
+      i===0?c.moveTo(0,y):c.lineTo(i,y);
+    }
+    c.strokeStyle=col; c.lineWidth=lw; c.stroke();
+  }
+  c.shadowBlur=0;
+  c.fillStyle='rgba(100,160,220,.65)'; c.font='9px Courier New';
+  c.textAlign='left'; c.fillText('OSCILLOSCOPE',4,11);
+
+  let rms=0; for(const v of td) rms+=(v/128)**2;
+  rms=Math.sqrt(rms/td.length);
+  lastRmsGlobal=rms;
+  document.getElementById('irs').textContent=(rms*100).toFixed(1)+'%';
+
+  const vu=Math.min(rms*1.6,1);
+  ['l','r'].forEach((ch,ci)=>{
+    const f=document.getElementById('vf'+ch), p=document.getElementById('vp'+ch);
+    f.style.width=(vu*100)+'%';
+    f.style.background=vu>.85?'linear-gradient(90deg,#0c6 0%,#ff0 55%,#f00 100%)':
+                        vu>.6?'linear-gradient(90deg,#0c6,#ff0)':'#0c6';
+    const pk=ci===0?(vuPL=Math.max(vuPL*.994,vu)):(vuPR=Math.max(vuPR*.994,vu));
+    p.style.left=(pk*100)+'%';
+  });
+}
+
+// 메인 루프
+let aid=null;
+function loop(){
+  aid=requestAnimationFrame(loop);
+  if(!an) return;
+  an.smoothingTimeConstant=parseInt(document.getElementById('sm').value)/100;
+  an.minDecibels=parseInt(document.getElementById('md').value);
+  const fd=new Uint8Array(an.frequencyBinCount);
+  const td=new Uint8Array(an.fftSize);
+  an.getByteFrequencyData(fd); an.getByteTimeDomainData(td);
+  const gain=parseInt(document.getElementById('gn').value)/10;
+  const v=bands(fd,actx.sampleRate);
+  for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
+  lastVals=v;
+  drawSpec(v); drawScope(td);
+}
+
+// AudioContext 초기화
+async function initCtx(){
+  if(!actx){
+    actx=new(window.AudioContext||window.webkitAudioContext)();
+    an=actx.createAnalyser();
+    an.fftSize=parseInt(document.getElementById('fft').value);
+    an.smoothingTimeConstant=.8;
+  }
+  if(actx.state==='suspended') await actx.resume();
+}
+
+function stopSrc(){
+  if(src){
+    try{ src.disconnect(); src.stop?.(); } catch(e){}
+    if(src._stream){ try{ src._stream.getTracks().forEach(t=>t.stop()); } catch(e){} }
+    src=null;
+  }
+  if(swId){ clearInterval(swId); swId=null; }
+  // 자동 분석 중지
+  if(autoAnalyze){
+    clearInterval(analyzeTimer); analyzeTimer=null;
+    autoAnalyze=false;
+    const b=document.getElementById('bAutoAnalyze');
+    b.textContent='🔄 자동 분석: OFF'; b.classList.remove('on');
+  }
+}
+
+function setBtn(id){
+  ['bSys','bMic','bFile','bTest'].forEach(b=>document.getElementById(b).classList.remove('on'));
+  if(id) document.getElementById(id).classList.add('on');
+  document.getElementById('bStop').style.display=id?'':'none';
+}
+function setStat(t){ document.getElementById('stat').textContent=t; }
+
+document.getElementById('fft').addEventListener('change',()=>{
+  if(an) an.fftSize=parseInt(document.getElementById('fft').value);
+});
+
+// AI 패널 토글
+document.getElementById('bToggleAI').addEventListener('click',()=>{
+  const h=app.classList.toggle('hide-ai');
+  document.getElementById('bToggleAI').textContent=h?'AI ◀':'AI ▶';
+  document.getElementById('bToggleAI').title=h?'AI 패널 보이기':'AI 패널 숨기기';
+});
+
+// 사이드바 토글
+const app=document.getElementById('app'), bTog=document.getElementById('bToggle');
+bTog.addEventListener('click',()=>{
+  const h=app.classList.toggle('hide-side');
+  bTog.textContent=h?'▶':'◀';
+  bTog.title=h?'파라미터 패널 보이기':'파라미터 패널 숨기기';
+});
+
+// 전체화면
+document.getElementById('bFullscreen').addEventListener('click',()=>{
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.();
+    document.getElementById('bFullscreen').textContent='⛶ 창모드';
+  } else {
+    document.exitFullscreen?.();
+    document.getElementById('bFullscreen').textContent='⛶ 전체화면';
+  }
+});
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement)
+    document.getElementById('bFullscreen').textContent='⛶ 전체화면';
+});
+
+// 정지
+document.getElementById('bStop').addEventListener('click',()=>{
+  stopSrc(); setBtn(null); setStat('정지됨');
+  if(aid){ cancelAnimationFrame(aid); aid=null; }
+});
+
+// 시스템 오디오
+document.getElementById('bSys').addEventListener('click',()=>{
+  document.getElementById('guide').style.display='block';
+});
+
+async function doCapture(){
+  await initCtx(); stopSrc();
+  try{
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getDisplayMedia({
+        video:false,
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,suppressLocalAudioPlayback:false}
+      });
+    }catch(e1){
+      stream=await navigator.mediaDevices.getDisplayMedia({
+        video:{width:1,height:1,frameRate:1,displaySurface:'monitor'},
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,suppressLocalAudioPlayback:false}
+      });
+    }
+    const aTracks=stream.getAudioTracks();
+    if(!aTracks.length){
+      stream.getTracks().forEach(t=>t.stop());
+      setStat('⚠ 오디오 없음 — 시스템 오디오 공유 토글을 켜세요');
+      return;
+    }
+    const audioOnly=new MediaStream(aTracks);
+    stream.getVideoTracks().forEach(t=>t.stop());
+    src=actx.createMediaStreamSource(audioOnly);
+    src._stream=stream;
+    src.connect(an);
+    aTracks[0].addEventListener('ended',()=>{ stopSrc(); setBtn(null); setStat('공유 중단됨'); });
+    document.getElementById('guide').style.display='none';
+    setBtn('bSys');
+    setStat('시스템 오디오 분석 중 | '+aTracks[0].label);
+    if(!aid) loop();
+  }catch(e){
+    if(e.name==='NotAllowedError') setStat('취소됨');
+    else setStat('오류: '+e.message);
+  }
+}
+
+// 마이크
+document.getElementById('bMic').addEventListener('click',async()=>{
+  await initCtx(); stopSrc();
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+    });
+    src=actx.createMediaStreamSource(s);
+    src._stream=s;
+    src.connect(an);
+    setBtn('bMic'); setStat('마이크 분석 중');
+    if(!aid) loop();
+  }catch(e){ setStat('마이크 오류: '+e.message); }
+});
+
+// 파일 재생
+document.getElementById('bFile').addEventListener('click',()=>document.getElementById('fi').click());
+document.getElementById('fi').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  await initCtx(); stopSrc();
+  const decoded=await actx.decodeAudioData(await f.arrayBuffer());
+  src=actx.createBufferSource();
+  src.buffer=decoded; src.loop=true;
+  src.connect(an);
+  src.connect(actx.destination);
+  src.start();
+  setBtn('bFile'); setStat('파일 재생 중: '+f.name);
+  if(!aid) loop();
+});
+
+// 테스트 신호
+document.getElementById('bTest').addEventListener('click',async()=>{
+  if(document.getElementById('bTest').classList.contains('on')){
+    stopSrc(); setBtn(null); setStat('정지됨'); return;
+  }
+  await initCtx(); stopSrc();
+  const nb=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate);
+  const nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1)*.2;
+  const ns=actx.createBufferSource(); ns.buffer=nb; ns.loop=true;
+  const osc=actx.createOscillator(); osc.type='sawtooth';
+  const og=actx.createGain(); og.gain.value=.3;
+  const mg=actx.createGain(); mg.gain.value=1;
+  const seq=[55,110,220,440,880,1760,3520,7040,14080,7040,3520,1760,880,440,220,110];
+  let si=0;
+  swId=setInterval(()=>{
+    if(!osc) return;
+    osc.frequency.setTargetAtTime(seq[si++%seq.length],actx.currentTime,.12);
+  },350);
+  ns.connect(mg); osc.connect(og); og.connect(mg);
+  mg.connect(an); mg.connect(actx.destination);
+  ns.start(); osc.start();
+  src={
+    disconnect:()=>{ try{ns.disconnect();og.disconnect();mg.disconnect();}catch(e){} },
+    stop:()=>{ try{ns.stop();osc.stop();}catch(e){} }
+  };
+  setBtn('bTest'); setStat('테스트 스윕 중');
+  if(!aid) loop();
+});
+
+// ── AI 분석 함수
+function freqToIdx(f){
+  return Math.min(NUM-1, Math.round(Math.log(f/FMIN)/Math.log(FMAX/FMIN)*NUM));
+}
+
+function computeMetrics(vals){
+  if(!vals) return null;
+  const bassEnd=freqToIdx(250);
+  const midEnd=freqToIdx(4000);
+  let bS=0, mS=0, hS=0;
+  for(let i=0;i<bassEnd;i++) bS+=vals[i];
+  for(let i=bassEnd;i<midEnd;i++) mS+=vals[i];
+  for(let i=midEnd;i<NUM;i++) hS+=vals[i];
+  let pkIdx=0;
+  for(let i=1;i<NUM;i++) if(vals[i]>vals[pkIdx]) pkIdx=i;
+  const peakFreq=pkIdx>0?Math.sqrt(BFREQ[pkIdx]*BFREQ[pkIdx+1]):0;
+  const bands32=[];
+  for(let i=0;i<32;i++){
+    const s=Math.floor(i*NUM/32), e2=Math.floor((i+1)*NUM/32);
+    let sum=0; for(let j=s;j<e2;j++) sum+=vals[j];
+    bands32.push(parseFloat((sum/(e2-s)).toFixed(4)));
+  }
+  return {
+    bass_energy: parseFloat((bS/Math.max(1,bassEnd)).toFixed(4)),
+    mid_energy:  parseFloat((mS/Math.max(1,midEnd-bassEnd)).toFixed(4)),
+    high_energy: parseFloat((hS/Math.max(1,NUM-midEnd)).toFixed(4)),
+    peak_freq:   parseFloat(peakFreq.toFixed(1)),
+    peak_level:  parseFloat(vals[pkIdx].toFixed(4)),
+    rms:         parseFloat(lastRmsGlobal.toFixed(4)),
+    spectral_bands: bands32
+  };
+}
+
+function setAiDot(cls, msg){
+  document.getElementById('ai-dot').className=cls;
+  document.getElementById('ai-stat').textContent=msg;
+}
+
+function updateAiPanel(data){
+  // 장르
+  const genreEl=document.getElementById('ai-genre');
+  genreEl.textContent=data.genre||'—';
+  const color=data.color_theme||'#00e5ff';
+  genreEl.style.color=color;
+  genreEl.style.textShadow=`0 0 12px ${color}`;
+
+  // 악기
+  const instrEl=document.getElementById('ai-instr');
+  const instrs=data.instruments||[];
+  instrEl.innerHTML=instrs.length>0
+    ?instrs.map(i=>`<span class="ai-tag">${i}</span>`).join('')
+    :'<span style="color:#222;font-size:9px">—</span>';
+
+  document.getElementById('ai-desc').textContent=data.description||'—';
+  document.getElementById('ai-prof').textContent=data.frequency_profile||'—';
+
+  // ── 이상감지
+  const anomalies=data.anomalies||[];
+  const threat=data.threat_level||'normal';
+  const detail=data.threat_detail||'';
+  const card=document.getElementById('anomaly-card');
+  const bar=document.getElementById('ai-threat-bar');
+  const icon=document.getElementById('threat-icon');
+  const detailEl=document.getElementById('ai-threat-detail');
+  const anomDiv=document.getElementById('ai-anomalies');
+
+  card.className='ai-card '+threat;
+  bar.className='threat-bar '+threat;
+  icon.className=threat;
+
+  if(anomalies.length===0){
+    detailEl.textContent='정상 — 이상 없음';
+    detailEl.style.color='var(--g)';
+    anomDiv.innerHTML='';
+  } else {
+    detailEl.textContent=detail||'이상 신호 감지됨';
+    detailEl.style.color=threat==='critical'?'var(--r)':'var(--y)';
+    anomDiv.innerHTML=anomalies.map(a=>
+      `<div class="anomaly-item">⚠ ${a}</div>`
+    ).join('');
+  }
+
+  analyzeCount++;
+  document.getElementById('ai-count').textContent=`분석 ${analyzeCount}회`;
+}
+
+async function runAnalysis(){
+  if(!an||!lastVals){ setAiDot('err','오디오 소스 없음'); return; }
+  const m=computeMetrics(lastVals);
+  if(!m) return;
+  if(m.rms<0.003&&m.peak_level<0.01){ setAiDot('idle','신호 없음'); return; }
+
+  setAiDot('busy','AI 분석 중...');
+  try{
+    const res=await fetch('/api/analyze',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(m)
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    updateAiPanel(data);
+    setAiDot('ok','분석 완료 '+new Date().toLocaleTimeString());
+  }catch(e){
+    setAiDot('err','오류: '+e.message);
+  }
+}
+
+document.getElementById('bAnalyzeNow').addEventListener('click',runAnalysis);
+
+document.getElementById('bAutoAnalyze').addEventListener('click',()=>{
+  autoAnalyze=!autoAnalyze;
+  const b=document.getElementById('bAutoAnalyze');
+  if(autoAnalyze){
+    b.textContent='🔄 자동 분석: ON'; b.classList.add('on');
+    analyzeTimer=setInterval(runAnalysis, AI_INTERVAL);
+    runAnalysis();
+  } else {
+    b.textContent='🔄 자동 분석: OFF'; b.classList.remove('on');
+    clearInterval(analyzeTimer); analyzeTimer=null;
+  }
+});
+</script>
+</body>
+</html>
