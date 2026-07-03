@@ -185,8 +185,8 @@ select:focus{outline:none;border-color:var(--c);}
     <div class="row"><label>GLOW</label><input type="range" id="sg" min="0" max="30" value="20"><span class="rv" id="vsg">20</span></div>
     <div class="row"><label>STYLE</label>
       <select id="ss">
-        <option value="line">VECTOR</option>
-        <option value="fill" selected>FILL</option>
+        <option value="line" selected>VECTOR</option>
+        <option value="fill">FILL</option>
         <option value="dot">DOT</option>
       </select>
     </div>
@@ -489,59 +489,93 @@ function drawSpec(vals){
   document.getElementById('ilv').textContent=(vals[pk]*100).toFixed(1)+'%';
 }
 
-// 오실로스코프 — 아날로그 글로우
+// 오실로스코프 그리기
 function drawScope(td){
   const c=octx, W=oc.width, H=oc.height;
   const tDiv=parseFloat(document.getElementById('td').value);
+  const trigLv=parseInt(document.getElementById('tl').value)/100;
+  const lw=parseFloat(document.getElementById('lw').value);
+  const glow=parseInt(document.getElementById('sg').value);
+  const style=document.getElementById('ss').value;
 
-  // 배경 완전 클리어
-  c.fillStyle='#0d0f14'; c.fillRect(0,0,W,H);
-
-  // 그리드
-  c.strokeStyle='rgba(50,60,80,0.6)'; c.lineWidth=1; c.setLineDash([2,6]);
+  c.fillStyle='#181b22'; c.fillRect(0,0,W,H);
+  c.strokeStyle='#2e3340'; c.lineWidth=1; c.setLineDash([2,5]);
   for(let i=1;i<4;i++){
     c.beginPath(); c.moveTo(W*i/4,0); c.lineTo(W*i/4,H); c.stroke();
-    c.beginPath(); c.moveTo(0,H*i/4); c.lineTo(W,H*i/4); c.stroke();
   }
+  c.beginPath(); c.moveTo(0,H/2); c.lineTo(W,H/2); c.stroke();
   c.setLineDash([]);
+  const ty=H*0.05+trigLv*H*0.9;
+  c.strokeStyle='rgba(250,204,21,.3)'; c.setLineDash([4,8]);
+  c.beginPath(); c.moveTo(0,ty); c.lineTo(W,ty); c.stroke(); c.setLineDash([]);
 
-  // 트리거 탐색
   const n=Math.min(td.length,Math.floor(td.length/tDiv));
   let si=0;
   for(let i=1;i<n-1;i++){
     if(td[i-1]<=128&&td[i]>128){ si=i; break; }
   }
 
-  // 자동 스케일
   let tMin=255, tMax=0;
   for(let i=si;i<si+n&&i<td.length;i++){ if(td[i]<tMin)tMin=td[i]; if(td[i]>tMax)tMax=td[i]; }
   const tRange=Math.max(tMax-tMin,4);
-  const sy=s=>H*0.04+((tMax-s)/tRange)*H*0.92;
+  function sy(s){ return H*0.03 + ((tMax-s)/tRange)*H*0.94; }
 
-  const hue=(Date.now()/30)%360;
-  const H1=`hsl(${hue},100%,75%)`;
-  const H2=`hsl(${hue},100%,55%)`;
+  const COL=['#22d3ee','#f97316','#38bdf8','#4ade80'][pal];
+  const COL2=['rgba(34,211,238,','rgba(249,115,22,','rgba(56,189,248,','rgba(74,222,128,'][pal];
+  c.shadowBlur=glow; c.shadowColor=COL;
 
-  // 경로 함수
-  function path(){
+  if(style==='dot'){
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      c.fillStyle=COL2+'0.8)'; c.fillRect(i,sy(td[idx]),lw,lw);
+    }
+  } else if(style==='fill'){
     c.beginPath();
     for(let i=0;i<W;i++){
       const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
       i===0?c.moveTo(0,sy(td[idx])):c.lineTo(i,sy(td[idx]));
     }
+    c.lineTo(W,H); c.lineTo(0,H); c.closePath();
+    const fg=c.createLinearGradient(0,0,0,H);
+    fg.addColorStop(0,COL2+'.45)'); fg.addColorStop(1,COL2+'0)');
+    c.fillStyle=fg; c.fill();
+    c.beginPath();
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      i===0?c.moveTo(0,sy(td[idx])):c.lineTo(i,sy(td[idx]));
+    }
+    c.strokeStyle=COL; c.lineWidth=lw; c.stroke();
+  } else {
+    const pts=[];
+    for(let i=0;i<W;i++){
+      const idx=si+Math.floor(i/W*n); if(idx>=td.length) break;
+      pts.push([i, sy(td[idx])]);
+    }
+    if(pts.length>1){
+      const NUM_LINES=30, SPREAD=H*0.35;
+      c.shadowBlur=glow; c.shadowColor=COL;
+      for(let l=0;l<NUM_LINES;l++){
+        const t=l/(NUM_LINES-1);
+        const yOff=(t-0.5)*SPREAD;
+        const ctr=1-Math.abs(t-0.5)*2;
+        const alpha=0.08+ctr*0.55;
+        c.beginPath();
+        c.moveTo(pts[0][0], pts[0][1]+yOff);
+        for(let i=1;i<pts.length-1;i++){
+          const mx=(pts[i][0]+pts[i+1][0])/2;
+          const my=(pts[i][1]+pts[i+1][1])/2+yOff;
+          c.quadraticCurveTo(pts[i][0],pts[i][1]+yOff,mx,my);
+        }
+        c.lineTo(pts[pts.length-1][0],pts[pts.length-1][1]+yOff);
+        c.strokeStyle=COL2+alpha.toFixed(2)+')';
+        c.lineWidth=0.6;
+        c.stroke();
+      }
+      c.shadowBlur=0;
+    }
   }
-
-  // 외곽 넓은 빛
-  path(); c.shadowBlur=0; c.strokeStyle=`hsla(${hue},100%,60%,0.15)`; c.lineWidth=20; c.stroke();
-  // 중간 빛
-  path(); c.shadowBlur=18; c.shadowColor=H2; c.strokeStyle=`hsla(${hue},100%,65%,0.5)`; c.lineWidth=6; c.stroke();
-  // 안쪽 빛
-  path(); c.shadowBlur=8; c.shadowColor=H1; c.strokeStyle=`hsla(${hue},100%,70%,0.85)`; c.lineWidth=2; c.stroke();
-  // 밝은 중심선
-  path(); c.shadowBlur=3; c.shadowColor='#fff'; c.strokeStyle=`hsla(${hue},80%,92%,1)`; c.lineWidth=0.8; c.stroke();
   c.shadowBlur=0;
-
-  c.fillStyle='rgba(120,140,170,.6)'; c.font='bold 9px Courier New';
+  c.fillStyle='rgba(136,150,170,.8)'; c.font='bold 9px Courier New';
   c.textAlign='left'; c.fillText('OSCILLOSCOPE',5,13);
 
   let rms=0; for(const v of td) rms+=(v/128)**2;
@@ -729,7 +763,7 @@ document.getElementById('bTest').addEventListener('click',async()=>{
     stopSrc(); setBtn(null); setStat('정지됨'); return;
   }
   await initCtx(); stopSrc();
-  const osc=actx.createOscillator(); osc.type='sawtooth';
+  const osc=actx.createOscillator(); osc.type='sine';
   const og=actx.createGain(); og.gain.value=.6;
   const mg=actx.createGain(); mg.gain.value=1;
   const seq=[55,110,220,440,880,1760,3520,7040,14080,7040,3520,1760,880,440,220,110];
@@ -739,7 +773,7 @@ document.getElementById('bTest').addEventListener('click',async()=>{
     osc.frequency.setTargetAtTime(seq[si++%seq.length],actx.currentTime,.12);
   },350);
   osc.connect(og); og.connect(mg);
-  mg.connect(an); mg.connect(actx.destination);
+  mg.connect(an);
   osc.start();
   src={
     disconnect:()=>{ try{og.disconnect();mg.disconnect();}catch(e){} },
