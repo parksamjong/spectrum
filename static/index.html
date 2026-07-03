@@ -520,8 +520,9 @@ function drawScope(td){
   const tRange=Math.max(tMax-tMin,4);
   function sy(s){ return H*0.03 + ((tMax-s)/tRange)*H*0.94; }
 
-  const COL=['#22d3ee','#f97316','#38bdf8','#4ade80'][pal];
-  const COL2=['rgba(34,211,238,','rgba(249,115,22,','rgba(56,189,248,','rgba(74,222,128,'][pal];
+  const hue=(Date.now()/30)%360;
+  const COL=`hsl(${hue},100%,62%)`;
+  const COL2=`hsla(${hue},100%,62%,`;
   c.shadowBlur=glow; c.shadowColor=COL;
 
   if(style==='dot'){
