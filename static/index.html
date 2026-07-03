@@ -180,12 +180,12 @@ select:focus{outline:none;border-color:var(--c);}
       </select>
     </div>
     <div class="row"><label>TRIG</label><input type="range" id="tl" min="0" max="100" value="50"><span class="rv" id="vtl">50</span></div>
-    <div class="row"><label>WIDTH</label><input type="range" id="lw" min="1" max="5" value="2" step=".5"><span class="rv" id="vlw">2</span></div>
-    <div class="row"><label>GLOW</label><input type="range" id="sg" min="0" max="30" value="14"><span class="rv" id="vsg">14</span></div>
+    <div class="row"><label>WIDTH</label><input type="range" id="lw" min="1" max="5" value="1.5" step=".5"><span class="rv" id="vlw">1.5</span></div>
+    <div class="row"><label>GLOW</label><input type="range" id="sg" min="0" max="30" value="20"><span class="rv" id="vsg">20</span></div>
     <div class="row"><label>STYLE</label>
       <select id="ss">
         <option value="line">VECTOR</option>
-        <option value="fill">FILL</option>
+        <option value="fill" selected>FILL</option>
         <option value="dot">DOT</option>
       </select>
     </div>
@@ -538,7 +538,7 @@ function drawScope(td){
     }
     c.lineTo(W,H); c.lineTo(0,H); c.closePath();
     const fg=c.createLinearGradient(0,0,0,H);
-    fg.addColorStop(0,COL2+'.45)'); fg.addColorStop(1,COL2+'0)');
+    fg.addColorStop(0,COL2+'.28)'); fg.addColorStop(0.5,COL2+'.1)'); fg.addColorStop(1,COL2+'0)');
     c.fillStyle=fg; c.fill();
     c.beginPath();
     for(let i=0;i<W;i++){
