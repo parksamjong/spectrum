@@ -563,14 +563,19 @@ document.getElementById('bFull').addEventListener('click',()=>{
 });
 document.addEventListener('fullscreenchange',()=>{
   const hdr=document.getElementById('hdr');
+  const side=document.getElementById('side');
   const app=document.getElementById('app');
   if(document.fullscreenElement){
     hdr.style.display='none';
+    side.style.display='none';
     app.style.gridTemplateRows='1fr';
+    app.style.gridTemplateColumns='0px 1fr';
     document.getElementById('bFull').textContent='⛶ 창모드';
   } else {
     hdr.style.display='';
+    side.style.display='';
     app.style.gridTemplateRows='';
+    app.style.gridTemplateColumns='';
     document.getElementById('bFull').textContent='⛶ 전체화면';
   }
 });
