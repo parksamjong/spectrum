@@ -602,8 +602,7 @@ function drawScope(td){
 }
 
 // 메인 루프
-let aid=null, aiAutoLast=0;
-const AI_AUTO_MS=3500;
+let aid=null;
 function loop(){
   aid=requestAnimationFrame(loop);
   if(!an) return;
@@ -617,8 +616,6 @@ function loop(){
   for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
   lastVals=v;
   drawSpec(v); drawScope(td);
-  const now=Date.now();
-  if(now-aiAutoLast>=AI_AUTO_MS){ aiAutoLast=now; runAnalysis(); }
 }
 
 // AudioContext 초기화

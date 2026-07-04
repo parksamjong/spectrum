@@ -90,6 +90,9 @@ select:focus{outline:none;border-color:var(--c);}
 .ai-dot.busy{background:var(--y);box-shadow:0 0 6px var(--y);}
 .ai-dot.error{background:#4a5060;}
 .ai-status-ok{font-size:9px;color:var(--g);letter-spacing:1px;}
+.ai-btn{width:100%;padding:6px;background:var(--bg);color:var(--txt);border:1px solid var(--border);border-radius:var(--rad);font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;transition:all .15s;}
+.ai-btn:hover{color:var(--hi);border-color:#5a6070;background:#2a2e38;}
+.ai-btn:disabled{opacity:.4;cursor:not-allowed;}
 .ai-status-busy{font-size:9px;color:var(--y);letter-spacing:1px;animation:blink .8s step-end infinite;}
 .ai-status-error{font-size:9px;color:#4a5060;letter-spacing:1px;}
 @keyframes blink{50%{opacity:0;}}
@@ -208,8 +211,9 @@ select:focus{outline:none;border-color:var(--c);}
     <div class="stit">AI 분석</div>
     <div class="ai-stat">
       <div id="ai-dot" class="ai-dot error"></div>
-      <span id="ai-status-txt" class="ai-status-error">서버 대기</span>
+      <span id="ai-status-txt" class="ai-status-error">소스 선택 후 분석</span>
     </div>
+    <button class="ai-btn" id="bAIAnalyze" style="margin-top:6px">⚡ 분석</button>
   </div>
   <div class="sec">
     <div class="stit">장르</div>
@@ -563,8 +567,8 @@ function drawScope(td){
 
 // ── AI Analysis (calls /api/analyze on the FastAPI server)
 const AI_SERVER='http://localhost:8000';
-let aiAnalyzing=false, aiLastCall=0;
-const AI_INTERVAL_MS=3500;
+let aiAnalyzing=false;
+let _aiVals=null,_aiRms=0,_aiPeakFreq=0,_aiPeakLevel=0;
 
 function freqToValIdx(f){ return Math.max(0,Math.min(NUM-1,Math.round((Math.log(f/FMIN)/Math.log(FMAX/FMIN))*(NUM-1)))); }
 function bandAvg(vals,f1,f2){ const i1=freqToValIdx(f1),i2=freqToValIdx(f2); let s=0; for(let i=i1;i<=i2;i++)s+=vals[i]; return s/Math.max(1,i2-i1+1); }
@@ -606,8 +610,8 @@ function renderAIResult(d){
 
 async function callAI(v, rmsVal, peakFreq, peakLevel){
   if(aiAnalyzing) return;
-  if(Date.now()-aiLastCall<AI_INTERVAL_MS) return;
-  aiLastCall=Date.now(); aiAnalyzing=true;
+  if(!v){ setAIDot('error'); return; }
+  aiAnalyzing=true;
   setAIDot('busy');
   const bands32=[];
   for(let i=0;i<32;i++) bands32.push(parseFloat(v[Math.floor(i*NUM/32)].toFixed(3)));
@@ -645,12 +649,11 @@ function loop(){
   const v=bands(fd,actx.sampleRate);
   for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
   drawSpec(v); drawScope(td);
-  // AI analysis
+  // 최신 오디오 스냅샷 저장 (버튼 클릭 시 사용)
   let pk=0; for(let i=1;i<NUM;i++) if(v[i]>v[pk]) pk=i;
-  const peakFreq=Math.round(Math.sqrt(BFREQ[pk]*BFREQ[pk+1]));
-  let rmsVal=0; for(const s of td) rmsVal+=(s/128)**2;
-  rmsVal=Math.sqrt(rmsVal/td.length);
-  callAI(v, rmsVal, peakFreq, v[pk]);
+  _aiPeakFreq=Math.round(Math.sqrt(BFREQ[pk]*BFREQ[pk+1]));
+  let _r=0; for(const s of td) _r+=(s/128)**2;
+  _aiRms=Math.sqrt(_r/td.length); _aiVals=v; _aiPeakLevel=v[pk];
 }
 
 async function initCtx(){
@@ -712,6 +715,11 @@ document.addEventListener('fullscreenchange',()=>{
     document.body.style.cursor='';
     document.getElementById('bFull').textContent='⛶ 전체화면';
   }
+});
+
+// AI 분석 버튼
+document.getElementById('bAIAnalyze').addEventListener('click',()=>{
+  callAI(_aiVals, _aiRms, _aiPeakFreq, _aiPeakLevel);
 });
 
 // 정지
