@@ -830,12 +830,12 @@ function computeMetrics(vals){
     bands32.push(parseFloat((sum/(e2-s)).toFixed(4)));
   }
   return {
-    bass_energy: parseFloat((bS/Math.max(1,bassEnd)).toFixed(4)),
-    mid_energy:  parseFloat((mS/Math.max(1,midEnd-bassEnd)).toFixed(4)),
-    high_energy: parseFloat((hS/Math.max(1,NUM-midEnd)).toFixed(4)),
+    bass_energy: parseFloat(Math.min(1,bS/Math.max(1,bassEnd)).toFixed(4)),
+    mid_energy:  parseFloat(Math.min(1,mS/Math.max(1,midEnd-bassEnd)).toFixed(4)),
+    high_energy: parseFloat(Math.min(1,hS/Math.max(1,NUM-midEnd)).toFixed(4)),
     peak_freq:   parseFloat(peakFreq.toFixed(1)),
-    peak_level:  parseFloat(vals[pkIdx].toFixed(4)),
-    rms:         parseFloat(lastRmsGlobal.toFixed(4)),
+    peak_level:  parseFloat(Math.min(1,vals[pkIdx]).toFixed(4)),
+    rms:         parseFloat(Math.min(1,lastRmsGlobal).toFixed(4)),
     spectral_bands: bands32
   };
 }

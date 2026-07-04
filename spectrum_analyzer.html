@@ -615,12 +615,12 @@ async function callAI(v, rmsVal, peakFreq, peakLevel){
     const resp=await fetch(`${AI_SERVER}/api/analyze`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        bass_energy:  parseFloat(bandAvg(v,80,250).toFixed(3)),
-        mid_energy:   parseFloat(bandAvg(v,250,2500).toFixed(3)),
-        high_energy:  parseFloat(bandAvg(v,2500,20000).toFixed(3)),
+        bass_energy:  parseFloat(Math.min(1,bandAvg(v,80,250)).toFixed(3)),
+        mid_energy:   parseFloat(Math.min(1,bandAvg(v,250,2500)).toFixed(3)),
+        high_energy:  parseFloat(Math.min(1,bandAvg(v,2500,20000)).toFixed(3)),
         peak_freq:    peakFreq,
-        peak_level:   parseFloat(peakLevel.toFixed(3)),
-        rms:          parseFloat(rmsVal.toFixed(3)),
+        peak_level:   parseFloat(Math.min(1,peakLevel).toFixed(3)),
+        rms:          parseFloat(Math.min(1,rmsVal).toFixed(3)),
         spectral_bands: bands32,
       }),
       signal: AbortSignal.timeout(12000),
