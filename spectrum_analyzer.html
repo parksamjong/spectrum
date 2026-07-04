@@ -15,8 +15,8 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--hi);font-family:'Courier New',monospace;font-size:12px;}
 
-#app{display:grid;grid-template-rows:44px 1fr;grid-template-columns:192px 1fr;height:100vh;transition:grid-template-columns .2s;}
-#app.hide-side{grid-template-columns:0px 1fr;}
+#app{display:grid;grid-template-rows:44px 1fr;grid-template-columns:192px 1fr 220px;height:100vh;transition:grid-template-columns .2s;}
+#app.hide-side{grid-template-columns:0px 1fr 220px;}
 #hdr{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 14px;background:var(--panel);border-bottom:2px solid var(--border);}
 #side{overflow-y:auto;overflow-x:hidden;background:var(--panel);border-right:2px solid var(--border);display:flex;flex-direction:column;gap:6px;padding:10px 8px;transition:all .2s;white-space:nowrap;}
 #app.hide-side #side{padding:0;border:none;}
@@ -80,6 +80,31 @@ select:focus{outline:none;border-color:var(--c);}
 #guide button{margin-top:14px;background:#0e2a30;border:1px solid var(--c);color:var(--c);
   padding:6px 20px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;}
 #guide button:hover{background:#1a4050;}
+
+/* AI PANEL */
+#ai{overflow-y:auto;overflow-x:hidden;background:var(--panel);border-left:2px solid var(--border);
+  display:flex;flex-direction:column;gap:6px;padding:10px 8px;min-width:0;}
+.ai-stat{display:flex;align-items:center;gap:6px;margin-top:2px;}
+.ai-dot{width:7px;height:7px;border-radius:50%;background:var(--txt);flex-shrink:0;transition:background .3s;}
+.ai-dot.ok{background:var(--g);box-shadow:0 0 6px var(--g);}
+.ai-dot.busy{background:var(--y);box-shadow:0 0 6px var(--y);}
+.ai-dot.error{background:#4a5060;}
+.ai-status-ok{font-size:9px;color:var(--g);letter-spacing:1px;}
+.ai-status-busy{font-size:9px;color:var(--y);letter-spacing:1px;animation:blink .8s step-end infinite;}
+.ai-status-error{font-size:9px;color:#4a5060;letter-spacing:1px;}
+@keyframes blink{50%{opacity:0;}}
+.ai-genre-main{font-size:14px;font-weight:bold;letter-spacing:3px;margin:5px 0 2px;color:var(--c);transition:color .5s;}
+#ai-desc{font-size:9px;color:var(--txt);line-height:1.7;min-height:14px;}
+.ai-instr-wrap{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+.ai-tag{font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--border);
+  color:var(--c);background:#0e2a30;letter-spacing:1px;white-space:nowrap;}
+.ai-none{font-size:9px;color:var(--txt);padding:4px 0;}
+.ai-ok{font-size:10px;color:var(--g);letter-spacing:1px;padding:2px 0;}
+.ai-anom{font-size:9px;padding:4px 8px;border-radius:3px;margin-bottom:3px;line-height:1.6;}
+.ai-anom.hi{background:#2a1018;color:var(--r);border-left:3px solid var(--r);}
+.ai-anom.med{background:#2a200a;color:var(--y);border-left:3px solid var(--y);}
+.ai-anom-item{font-size:8px;color:var(--txt);padding:2px 0 2px 8px;border-left:2px solid #3a3f4b;margin-bottom:2px;line-height:1.5;}
+#ai-profile{font-size:8px;color:#4a5060;line-height:1.7;word-break:break-all;margin-top:3px;}
 </style>
 </head>
 <body>
@@ -176,6 +201,33 @@ select:focus{outline:none;border-color:var(--c);}
 <div id="main">
   <div id="sw"><canvas id="sc"></canvas><div id="hz-tip"></div></div>
   <div id="ow"><canvas id="oc"></canvas></div>
+</div>
+
+<div id="ai">
+  <div class="sec">
+    <div class="stit">AI 분석</div>
+    <div class="ai-stat">
+      <div id="ai-dot" class="ai-dot error"></div>
+      <span id="ai-status-txt" class="ai-status-error">서버 대기</span>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="stit">장르</div>
+    <div id="ai-genre-val" class="ai-genre-main">—</div>
+    <div id="ai-desc"></div>
+  </div>
+  <div class="sec">
+    <div class="stit">악기 감지</div>
+    <div id="ai-instruments" class="ai-instr-wrap"><div class="ai-none">대기 중</div></div>
+  </div>
+  <div class="sec">
+    <div class="stit">이상 탐지</div>
+    <div id="ai-anomaly"><div class="ai-none">대기 중</div></div>
+  </div>
+  <div class="sec">
+    <div class="stit">스펙트럼 프로필</div>
+    <div id="ai-profile">—</div>
+  </div>
 </div>
 
 </div>
@@ -509,6 +561,77 @@ function drawScope(td){
   });
 }
 
+// ── AI Analysis (calls /api/analyze on the FastAPI server)
+const AI_SERVER='http://localhost:8000';
+let aiAnalyzing=false, aiLastCall=0;
+const AI_INTERVAL_MS=3500;
+
+function freqToValIdx(f){ return Math.max(0,Math.min(NUM-1,Math.round((Math.log(f/FMIN)/Math.log(FMAX/FMIN))*(NUM-1)))); }
+function bandAvg(vals,f1,f2){ const i1=freqToValIdx(f1),i2=freqToValIdx(f2); let s=0; for(let i=i1;i<=i2;i++)s+=vals[i]; return s/Math.max(1,i2-i1+1); }
+
+function setAIDot(state){
+  const d=document.getElementById('ai-dot'), t=document.getElementById('ai-status-txt');
+  if(!d||!t) return;
+  d.className='ai-dot '+state;
+  const msgs={ok:'분석 완료',busy:'분석 중...',error:'서버 오프라인'};
+  t.className='ai-status-'+state; t.textContent=msgs[state]||state;
+}
+
+function renderAIResult(d){
+  const gEl=document.getElementById('ai-genre-val');
+  if(gEl){ gEl.textContent=d.genre||'—'; gEl.style.color=d.color_theme||'var(--c)'; }
+  const dEl=document.getElementById('ai-desc');
+  if(dEl) dEl.textContent=d.description||'';
+  const iEl=document.getElementById('ai-instruments');
+  if(iEl){
+    const arr=d.instruments||[];
+    iEl.className='ai-instr-wrap';
+    iEl.innerHTML=arr.length?arr.map(x=>`<div class="ai-tag">${x}</div>`).join(''):'<div class="ai-none">감지 없음</div>';
+  }
+  const aEl=document.getElementById('ai-anomaly');
+  if(aEl){
+    const lvl=d.threat_level, anoms=d.anomalies||[];
+    if(lvl==='normal'&&!anoms.length){ aEl.innerHTML='<div class="ai-ok">✓ 정상</div>'; }
+    else{
+      const cls=lvl==='critical'?'hi':'med';
+      let h='';
+      if(d.threat_detail) h+=`<div class="ai-anom ${cls}">⚠ ${d.threat_detail}</div>`;
+      h+=anoms.map(a=>`<div class="ai-anom-item">${a}</div>`).join('');
+      aEl.innerHTML=h;
+    }
+  }
+  const pEl=document.getElementById('ai-profile');
+  if(pEl) pEl.textContent=d.frequency_profile||'';
+}
+
+async function callAI(v, rmsVal, peakFreq, peakLevel){
+  if(aiAnalyzing) return;
+  if(Date.now()-aiLastCall<AI_INTERVAL_MS) return;
+  aiLastCall=Date.now(); aiAnalyzing=true;
+  setAIDot('busy');
+  const bands32=[];
+  for(let i=0;i<32;i++) bands32.push(parseFloat(v[Math.floor(i*NUM/32)].toFixed(3)));
+  try{
+    const resp=await fetch(`${AI_SERVER}/api/analyze`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        bass_energy:  parseFloat(bandAvg(v,80,250).toFixed(3)),
+        mid_energy:   parseFloat(bandAvg(v,250,2500).toFixed(3)),
+        high_energy:  parseFloat(bandAvg(v,2500,20000).toFixed(3)),
+        peak_freq:    peakFreq,
+        peak_level:   parseFloat(peakLevel.toFixed(3)),
+        rms:          parseFloat(rmsVal.toFixed(3)),
+        spectral_bands: bands32,
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    renderAIResult(await resp.json());
+    setAIDot('ok');
+  }catch(e){ setAIDot('error'); }
+  aiAnalyzing=false;
+}
+
 let aid=null;
 function loop(){
   aid=requestAnimationFrame(loop);
@@ -522,6 +645,12 @@ function loop(){
   const v=bands(fd,actx.sampleRate);
   for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
   drawSpec(v); drawScope(td);
+  // AI analysis
+  let pk=0; for(let i=1;i<NUM;i++) if(v[i]>v[pk]) pk=i;
+  const peakFreq=Math.round(Math.sqrt(BFREQ[pk]*BFREQ[pk+1]));
+  let rmsVal=0; for(const s of td) rmsVal+=(s/128)**2;
+  rmsVal=Math.sqrt(rmsVal/td.length);
+  callAI(v, rmsVal, peakFreq, v[pk]);
 }
 
 async function initCtx(){
@@ -565,16 +694,19 @@ document.addEventListener('fullscreenchange',()=>{
   const hdr=document.getElementById('hdr');
   const side=document.getElementById('side');
   const app=document.getElementById('app');
+  const aiPanel=document.getElementById('ai');
   if(document.fullscreenElement){
     hdr.style.display='none';
     side.style.display='none';
+    if(aiPanel) aiPanel.style.display='none';
     app.style.gridTemplateRows='1fr';
-    app.style.gridTemplateColumns='0px 1fr';
+    app.style.gridTemplateColumns='0px 1fr 0px';
     document.body.style.cursor='none';
     document.getElementById('bFull').textContent='⛶ 창모드';
   } else {
     hdr.style.display='';
     side.style.display='';
+    if(aiPanel) aiPanel.style.display='';
     app.style.gridTemplateRows='';
     app.style.gridTemplateColumns='';
     document.body.style.cursor='';
