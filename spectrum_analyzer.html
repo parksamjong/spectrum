@@ -698,20 +698,29 @@ document.addEventListener('fullscreenchange',()=>{
   const side=document.getElementById('side');
   const app=document.getElementById('app');
   const aiPanel=document.getElementById('ai');
+  const main=document.getElementById('main');
   if(document.fullscreenElement){
     hdr.style.display='none';
     side.style.display='none';
     if(aiPanel) aiPanel.style.display='none';
-    app.style.gridTemplateRows='1fr';
-    app.style.gridTemplateColumns='0px 1fr 0px';
+    app.style.display='block';
+    main.style.position='fixed';
+    main.style.inset='0';
+    main.style.width='100vw';
+    main.style.height='100vh';
+    main.style.zIndex='1';
     document.body.style.cursor='none';
     document.getElementById('bFull').textContent='⛶ 창모드';
   } else {
     hdr.style.display='';
     side.style.display='';
     if(aiPanel) aiPanel.style.display='';
-    app.style.gridTemplateRows='';
-    app.style.gridTemplateColumns='';
+    app.style.display='';
+    main.style.position='';
+    main.style.inset='';
+    main.style.width='';
+    main.style.height='';
+    main.style.zIndex='';
     document.body.style.cursor='';
     document.getElementById('bFull').textContent='⛶ 전체화면';
   }
