@@ -602,7 +602,8 @@ function drawScope(td){
 }
 
 // 메인 루프
-let aid=null;
+let aid=null, aiAutoLast=0;
+const AI_AUTO_MS=3500;
 function loop(){
   aid=requestAnimationFrame(loop);
   if(!an) return;
@@ -616,6 +617,8 @@ function loop(){
   for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
   lastVals=v;
   drawSpec(v); drawScope(td);
+  const now=Date.now();
+  if(now-aiAutoLast>=AI_AUTO_MS){ aiAutoLast=now; runAnalysis(); }
 }
 
 // AudioContext 초기화
@@ -673,17 +676,31 @@ bTog.addEventListener('click',()=>{
 
 // 전체화면
 document.getElementById('bFullscreen').addEventListener('click',()=>{
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen?.();
-    document.getElementById('bFullscreen').textContent='⛶ 창모드';
-  } else {
-    document.exitFullscreen?.();
-    document.getElementById('bFullscreen').textContent='⛶ 전체화면';
-  }
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
 });
 document.addEventListener('fullscreenchange',()=>{
-  if(!document.fullscreenElement)
+  const hdr=document.getElementById('hdr');
+  const side=document.getElementById('side');
+  const aiP=document.getElementById('ai');
+  const appEl=document.getElementById('app');
+  if(document.fullscreenElement){
+    hdr.style.display='none';
+    side.style.display='none';
+    aiP.style.display='none';
+    appEl.style.gridTemplateRows='1fr';
+    appEl.style.gridTemplateColumns='0px 1fr 0px';
+    document.body.style.cursor='none';
+    document.getElementById('bFullscreen').textContent='⛶ 창모드';
+  } else {
+    hdr.style.display='';
+    side.style.display='';
+    aiP.style.display='';
+    appEl.style.gridTemplateRows='';
+    appEl.style.gridTemplateColumns='';
+    document.body.style.cursor='';
     document.getElementById('bFullscreen').textContent='⛶ 전체화면';
+  }
 });
 
 // 정지
