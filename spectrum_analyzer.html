@@ -570,12 +570,14 @@ document.addEventListener('fullscreenchange',()=>{
     side.style.display='none';
     app.style.gridTemplateRows='1fr';
     app.style.gridTemplateColumns='0px 1fr';
+    document.body.style.cursor='none';
     document.getElementById('bFull').textContent='⛶ 창모드';
   } else {
     hdr.style.display='';
     side.style.display='';
     app.style.gridTemplateRows='';
     app.style.gridTemplateColumns='';
+    document.body.style.cursor='';
     document.getElementById('bFull').textContent='⛶ 전체화면';
   }
 });
