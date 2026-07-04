@@ -558,8 +558,21 @@ bTog.addEventListener('click',()=>{
 
 // 전체화면
 document.getElementById('bFull').addEventListener('click',()=>{
-  if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); document.getElementById('bFull').textContent='⛶ 창모드'; }
-  else{ document.exitFullscreen?.(); document.getElementById('bFull').textContent='⛶ 전체화면'; }
+  if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); }
+  else{ document.exitFullscreen?.(); }
+});
+document.addEventListener('fullscreenchange',()=>{
+  const hdr=document.getElementById('hdr');
+  const app=document.getElementById('app');
+  if(document.fullscreenElement){
+    hdr.style.display='none';
+    app.style.gridTemplateRows='1fr';
+    document.getElementById('bFull').textContent='⛶ 창모드';
+  } else {
+    hdr.style.display='';
+    app.style.gridTemplateRows='';
+    document.getElementById('bFull').textContent='⛶ 전체화면';
+  }
 });
 
 // 정지
