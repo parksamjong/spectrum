@@ -725,6 +725,7 @@ document.addEventListener('fullscreenchange',()=>{
     main.style.zIndex='1';
     document.body.style.cursor='none';
     document.getElementById('bFull').textContent='⛶ 창모드';
+    setTimeout(resize,50);
   } else {
     hdr.style.display='';
     side.style.display='';
@@ -737,6 +738,7 @@ document.addEventListener('fullscreenchange',()=>{
     main.style.zIndex='';
     document.body.style.cursor='';
     document.getElementById('bFull').textContent='⛶ 전체화면';
+    setTimeout(resize,50);
   }
 });
 
