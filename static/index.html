@@ -977,10 +977,9 @@ document.getElementById('bStop').addEventListener('click',()=>{
   if(aid){ cancelAnimationFrame(aid); aid=null; }
 });
 
-// 시스템 오디오 버튼 → 장치 선택 모달 (마이크와 동일)
+// 시스템 오디오 버튼 → 화면 공유 가이드 (원래 동작)
 document.getElementById('bSys').addEventListener('click',()=>{
-  stopSrc(); disconnectSysWs();
-  openDevModal();
+  document.getElementById('guide').style.display='block';
 });
 
 async function doCapture(){
