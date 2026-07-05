@@ -108,6 +108,18 @@ select:focus{outline:none;border-color:var(--c);}
 #guide .note{font-size:9px;color:var(--txt);margin-top:10px;}
 #guide button{margin-top:14px;background:#0e2a30;border:1px solid var(--c);color:var(--c);padding:6px 20px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;}
 #guide button:hover{background:#1a4050;}
+
+/* 장치 선택 모달 */
+#dev-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#23272f;border:2px solid var(--c);border-radius:10px;padding:20px 24px;z-index:9999;min-width:360px;max-width:520px;max-height:80vh;font-family:'Courier New',monospace;flex-direction:column;}
+#dev-list{overflow-y:auto;max-height:55vh;padding-right:4px;}
+#dev-modal h3{color:var(--c);font-size:12px;letter-spacing:3px;margin-bottom:14px;}
+.dev-item{padding:9px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:10px;color:var(--txt);letter-spacing:1px;transition:all .13s;display:flex;align-items:center;gap:8px;}
+.dev-item:hover{border-color:var(--c);color:var(--hi);background:#0e2a30;}
+.dev-item.default-dev{border-color:#4ade80;color:#4ade80;}
+.dev-badge{font-size:8px;padding:1px 6px;border-radius:8px;background:#0e2a30;color:var(--c);border:1px solid var(--c);white-space:nowrap;}
+#dev-cancel{margin-top:10px;font-size:9px;color:var(--txt);text-align:center;cursor:pointer;letter-spacing:1px;}
+#dev-cancel:hover{color:var(--hi);}
+#dev-perm-warn{font-size:9px;color:var(--y);margin-bottom:10px;display:none;}
 </style>
 </head>
 <body>
@@ -278,6 +290,14 @@ select:focus{outline:none;border-color:var(--c);}
 </div>
 
 </div><!-- /#app -->
+
+<!-- 입력 장치 선택 모달 -->
+<div id="dev-modal">
+  <h3>INPUT DEVICE SELECT</h3>
+  <div id="dev-perm-warn">⚠ 장치 목록을 읽는 중... 잠시 기다려 주세요</div>
+  <div id="dev-list"></div>
+  <div id="dev-cancel" onclick="closeDevModal()">취소</div>
+</div>
 
 <!-- 시스템 오디오 안내 -->
 <div id="guide">
@@ -615,10 +635,94 @@ function drawScope(td){
   });
 }
 
-// 메인 루프
+// ── WebSocket 시스템 오디오 ──────────────────────────────────────────────
+let sysWs=null, wsMode=false, wsLastFft=null;
+
+async function openDevModal(){
+  document.getElementById('dev-modal').style.display='flex';
+  document.getElementById('dev-perm-warn').style.display='block';
+  document.getElementById('dev-list').innerHTML='';
+  try{
+    const resp=await fetch('/api/audio/devices');
+    const json=await resp.json();
+    document.getElementById('dev-perm-warn').style.display='none';
+    if(json.error){
+      document.getElementById('dev-list').innerHTML=`<div style="color:var(--r);font-size:10px">오류: ${json.error}<br><br>pip install sounddevice numpy</div>`;
+      return;
+    }
+    if(!json.devices||!json.devices.length){
+      document.getElementById('dev-list').innerHTML='<div style="color:var(--y);font-size:10px">입력 장치 없음</div>';
+      return;
+    }
+    const list=document.getElementById('dev-list');
+    json.devices.forEach(d=>{
+      const el=document.createElement('div');
+      el.className='dev-item'+(d.is_default?' default-dev':'');
+      el.innerHTML=`<span style="flex:1">${d.name}</span>`
+        +(d.is_default?'<span class="dev-badge">DEFAULT</span>':'')
+        +`<span style="font-size:8px;color:#5a6070;margin-left:6px">${d.channels}ch ${d.sample_rate}Hz</span>`;
+      el.addEventListener('click',()=>{ closeDevModal(); connectSysAudio(d.id, d.name, d.sample_rate); });
+      list.appendChild(el);
+    });
+  }catch(e){
+    document.getElementById('dev-perm-warn').style.display='none';
+    document.getElementById('dev-list').innerHTML=`<div style="color:var(--r);font-size:10px">서버 오류: ${e.message}</div>`;
+  }
+}
+
+function closeDevModal(){ document.getElementById('dev-modal').style.display='none'; wsMode||setBtn(null); }
+
+function disconnectSysWs(){
+  if(sysWs){ try{sysWs.close();}catch(e){} sysWs=null; }
+  wsMode=false; wsLastFft=null;
+}
+
+async function connectSysAudio(deviceId, deviceName, sr){
+  disconnectSysWs();
+  setStat(`연결 중: ${deviceName}...`);
+  const url=`ws://${location.host}/ws/audio?device_id=${deviceId}`;
+  sysWs=new WebSocket(url);
+  sysWs.onmessage=e=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='ready'){
+      wsMode=true;
+      setBtn('bMic');
+      setStat(`시스템 입력: ${deviceName} | ${msg.sr}Hz`);
+      if(!aid) loop();
+    } else if(msg.type==='fft'){
+      const gain=parseInt(document.getElementById('gn').value)/10;
+      const fftArr=new Float32Array(msg.d.length);
+      for(let i=0;i<msg.d.length;i++) fftArr[i]=Math.min(1,msg.d[i]*gain);
+      wsLastFft={fft:fftArr, rms:msg.rms};
+      lastRmsGlobal=msg.rms;
+    } else if(msg.type==='error'){
+      setStat('오류: '+msg.msg);
+      disconnectSysWs();
+    }
+  };
+  sysWs.onerror=()=>{ setStat('WebSocket 연결 오류'); disconnectSysWs(); };
+  sysWs.onclose=()=>{ if(wsMode){ setStat('시스템 오디오 연결 끊김'); disconnectSysWs(); } };
+}
+
+// ── 메인 루프 ────────────────────────────────────────────────────────────────
 let aid=null;
 function loop(){
   aid=requestAnimationFrame(loop);
+
+  // WebSocket 시스템 오디오 모드
+  if(wsMode && wsLastFft){
+    const {fft, rms}=wsLastFft;
+    // 스펙트럼 그리기 (wsLastFft.fft를 NUM 빈으로 리샘플)
+    const v=resampleFft(fft, NUM);
+    lastVals=v;
+    drawSpec(v);
+    // 오실로스코프: RMS로 합성 파형 생성
+    const td=synthScope(rms, an ? an.fftSize : 2048);
+    drawScope(td);
+    updateVU(rms);
+    return;
+  }
+
   if(!an) return;
   an.smoothingTimeConstant=parseInt(document.getElementById('sm').value)/100;
   an.minDecibels=parseInt(document.getElementById('md').value);
@@ -630,6 +734,41 @@ function loop(){
   for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
   lastVals=v;
   drawSpec(v); drawScope(td);
+}
+
+// WebSocket FFT를 NUM 빈으로 선형 보간
+function resampleFft(src, outLen){
+  const out=new Float32Array(outLen);
+  const ratio=(src.length-1)/(outLen-1);
+  for(let i=0;i<outLen;i++){
+    const pos=i*ratio;
+    const lo=Math.floor(pos), hi=Math.min(lo+1,src.length-1);
+    const t=pos-lo;
+    out[i]=src[lo]*(1-t)+src[hi]*t;
+  }
+  return out;
+}
+
+// RMS로 합성 오실로스코프 데이터
+function synthScope(rms, size){
+  const td=new Uint8Array(size);
+  const amp=Math.min(120, rms*800);
+  for(let i=0;i<size;i++) td[i]=128+Math.round(amp*Math.sin(i*6.28/32*(1+rms*4)));
+  return td;
+}
+
+function updateVU(rms){
+  const vu=Math.min(rms*6,1);
+  ['l','r'].forEach(ch=>{
+    const f=document.getElementById('vf'+ch), p=document.getElementById('vp'+ch);
+    f.style.width=(vu*100)+'%';
+    f.style.background=vu>.85?'linear-gradient(90deg,#0c6 0%,#ff0 55%,#f00 100%)':
+                        vu>.6?'linear-gradient(90deg,#0c6,#ff0)':'#0c6';
+    const pk=Math.max((ch==='l'?vuPL:vuPR)*.994,vu);
+    if(ch==='l') vuPL=pk; else vuPR=pk;
+    p.style.left=(pk*100)+'%';
+  });
+  document.getElementById('irs').textContent=(rms*100).toFixed(2)+'%';
 }
 
 // AudioContext 초기화
@@ -727,7 +866,7 @@ document.addEventListener('fullscreenchange',()=>{
 
 // 정지
 document.getElementById('bStop').addEventListener('click',()=>{
-  stopSrc(); setBtn(null); setStat('정지됨');
+  stopSrc(); disconnectSysWs(); setBtn(null); setStat('정지됨');
   if(aid){ cancelAnimationFrame(aid); aid=null; }
 });
 
@@ -773,19 +912,10 @@ async function doCapture(){
   }
 }
 
-// 마이크
-document.getElementById('bMic').addEventListener('click',async()=>{
-  await initCtx(); stopSrc();
-  try{
-    const s=await navigator.mediaDevices.getUserMedia({
-      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
-    });
-    src=actx.createMediaStreamSource(s);
-    src._stream=s;
-    src.connect(an);
-    setBtn('bMic'); setStat('마이크 분석 중');
-    if(!aid) loop();
-  }catch(e){ setStat('마이크 오류: '+e.message); }
+// 마이크 → 시스템 입력 장치 선택
+document.getElementById('bMic').addEventListener('click',()=>{
+  stopSrc(); disconnectSysWs();
+  openDevModal();
 });
 
 // 파일 재생

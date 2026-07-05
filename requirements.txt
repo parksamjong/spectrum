@@ -4,3 +4,6 @@ langgraph>=0.2.50
 langchain-anthropic>=0.3.0
 langchain-core>=0.3.0
 python-dotenv>=1.0.1
+sounddevice>=0.4.6
+numpy>=1.24.0
+websockets>=12.0
