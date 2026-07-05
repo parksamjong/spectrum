@@ -105,53 +105,138 @@ async def get_audio_devices():
         return {"devices": [], "error": str(e)}
 
 
+# ── 장치 분류 태그 helper ────────────────────────────────────────────────────
+
+_LOOPBACK_KW = ('loopback', 'stereo mix', '스테레오 믹스', 'what u hear', 'wave out')
+
+def _dev_type(name: str) -> str:
+    lo = name.lower()
+    return 'system' if any(k in lo for k in _LOOPBACK_KW) else 'mic'
+
+
+# ── 장치 목록 API (type 필드 추가) ──────────────────────────────────────────
+
+@app.get("/api/audio/devices2")
+async def get_audio_devices2():
+    if not _SD_OK:
+        return {"devices": [], "error": "sounddevice not installed"}
+    try:
+        devs = sd.query_devices()
+        try:
+            default_in = int(sd.default.device[0])
+        except Exception:
+            default_in = -1
+        result = []
+        for i, d in enumerate(devs):
+            if d['max_input_channels'] > 0:
+                name = str(d['name'])
+                result.append({
+                    "id":          int(i),
+                    "name":        name,
+                    "channels":    int(d['max_input_channels']),
+                    "sample_rate": int(d['default_samplerate']),
+                    "is_default":  (int(i) == default_in),
+                    "type":        _dev_type(name),
+                })
+        return {"devices": result, "default_id": default_in}
+    except Exception as e:
+        return {"devices": [], "error": str(e)}
+
+
+# ── 내부 helper: FFT 계산 ────────────────────────────────────────────────────
+
+def _make_fft(data: np.ndarray, hann: np.ndarray, block: int) -> np.ndarray:
+    mono = data.mean(axis=1) if data.ndim > 1 else data.ravel()
+    if len(mono) < block:
+        mono = np.pad(mono, (0, block - len(mono)))
+    fft = np.abs(np.fft.rfft(mono[:block] * hann))[: block // 2]
+    fft_db = 20.0 * np.log10(fft + 1e-9)
+    return np.clip((fft_db + 80.0) / 80.0, 0.0, 1.0).astype(np.float32)
+
+
 # ── System audio: WebSocket FFT stream ───────────────────────────────────────
 
 @app.websocket("/ws/audio")
-async def audio_ws(websocket: WebSocket, device_id: int = -1):
+async def audio_ws(websocket: WebSocket, device_id: int = -1, mix_device_id: int = -1):
+    """
+    device_id     : 주 입력 장치 (마이크 or 시스템 사운드)
+    mix_device_id : 추가 혼합 장치 (시스템 사운드 or 마이크)  -1이면 단일 장치
+    두 FFT는 element-wise max 로 합성
+    """
     await websocket.accept()
 
     if not _SD_OK:
-        await websocket.send_json({"type": "error", "msg": "sounddevice not installed - run: pip install sounddevice numpy"})
+        await websocket.send_json({"type": "error", "msg": "sounddevice not installed"})
         await websocket.close()
         return
 
     BLOCK = 2048
     SR = 44100
 
+    # 주 장치 샘플레이트
     try:
-        dev_info = sd.query_devices(device_id if device_id >= 0 else None)
-        SR = int(dev_info['default_samplerate'])
+        SR = int(sd.query_devices(device_id if device_id >= 0 else None)['default_samplerate'])
     except Exception:
         pass
 
     hann = np.hanning(BLOCK).astype(np.float32)
-    loop = asyncio.get_event_loop()
-    queue: asyncio.Queue = asyncio.Queue(maxsize=4)
+    ev_loop = asyncio.get_event_loop()
+    q1: asyncio.Queue = asyncio.Queue(maxsize=4)
+    q2: asyncio.Queue = asyncio.Queue(maxsize=4)
+    smooth_buf = None
 
-    def callback(indata, frames, time_info, status):
-        mono = indata[:, 0] if indata.ndim > 1 else indata.ravel()
-        try:
-            loop.call_soon_threadsafe(queue.put_nowait, mono.copy())
-        except asyncio.QueueFull:
-            pass
+    def _cb(q):
+        def cb(indata, frames, time_info, status):
+            try:
+                ev_loop.call_soon_threadsafe(q.put_nowait, indata.copy())
+            except asyncio.QueueFull:
+                pass
+        return cb
+
+    def _open(dev_id, q):
+        n_ch = 1
+        sr = SR
+        if dev_id >= 0:
+            try:
+                info = sd.query_devices(dev_id)
+                n_ch = min(int(info['max_input_channels']), 2)
+                sr = int(info['default_samplerate'])
+            except Exception:
+                pass
+        kw = dict(samplerate=sr, channels=n_ch, blocksize=BLOCK, callback=_cb(q), dtype='float32')
+        if dev_id >= 0:
+            kw['device'] = dev_id
+        return sd.InputStream(**kw)
 
     try:
-        stream_kwargs: dict = dict(
-            samplerate=SR,
-            channels=1,
-            blocksize=BLOCK,
-            callback=callback,
-            dtype="float32",
-        )
-        if device_id >= 0:
-            stream_kwargs["device"] = device_id
+        streams = []
+        use_primary = device_id >= 0
+        use_mix     = mix_device_id >= 0
 
-        with sd.InputStream(**stream_kwargs):
+        if not use_primary and not use_mix:
+            await websocket.send_json({"type": "error", "msg": "장치를 선택하세요"})
+            return
+
+        if use_primary:
+            streams.append(_open(device_id, q1))
+        if use_mix:
+            streams.append(_open(mix_device_id, q2))
+
+        import contextlib
+        with contextlib.ExitStack() as stack:
+            for s in streams:
+                stack.enter_context(s)
+
             await websocket.send_json({"type": "ready", "sr": SR, "bins": BLOCK // 2})
+
+            # 주 큐 결정 (primary or mix-only)
+            main_q = q1 if use_primary else q2
+            sec_q  = q2 if (use_primary and use_mix) else None
+            last_sec = np.zeros(BLOCK // 2, dtype=np.float32)
+
             while True:
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=2.0)
+                    raw1 = await asyncio.wait_for(main_q.get(), timeout=2.0)
                 except asyncio.TimeoutError:
                     try:
                         await websocket.send_json({"type": "ping"})
@@ -159,14 +244,32 @@ async def audio_ws(websocket: WebSocket, device_id: int = -1):
                         break
                     continue
 
-                fft = np.abs(np.fft.rfft(data * hann))[: BLOCK // 2]
-                fft_db = 20.0 * np.log10(fft + 1e-9)
-                fft_norm = np.clip((fft_db + 90.0) / 90.0, 0.0, 1.0).astype(np.float32)
-                rms = float(np.sqrt(np.mean(data ** 2)))
+                fft_main = _make_fft(raw1, hann, BLOCK)
+
+                # 보조 장치 FFT (가장 최신 프레임 사용)
+                if sec_q is not None:
+                    while not sec_q.empty():
+                        try:
+                            raw2 = sec_q.get_nowait()
+                            last_sec = _make_fft(raw2, hann, BLOCK)
+                        except Exception:
+                            break
+                    fft_combined = np.maximum(fft_main, last_sec)
+                else:
+                    fft_combined = fft_main
+
+                # EMA 스무딩
+                if smooth_buf is None:
+                    smooth_buf = fft_combined.copy()
+                else:
+                    smooth_buf = 0.65 * smooth_buf + 0.35 * fft_combined
+                    fft_combined = smooth_buf
+
+                rms = float(np.sqrt(np.mean((raw1.mean(axis=1) if raw1.ndim > 1 else raw1.ravel()) ** 2)))
 
                 await websocket.send_json({
                     "type": "fft",
-                    "d":   [round(float(v), 3) for v in fft_norm],
+                    "d":   [round(float(v), 3) for v in fft_combined],
                     "rms": round(rms, 5),
                     "sr":  SR,
                 })

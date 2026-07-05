@@ -110,16 +110,26 @@ select:focus{outline:none;border-color:var(--c);}
 #guide button:hover{background:#1a4050;}
 
 /* 장치 선택 모달 */
-#dev-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#23272f;border:2px solid var(--c);border-radius:10px;padding:20px 24px;z-index:9999;min-width:360px;max-width:520px;max-height:80vh;font-family:'Courier New',monospace;flex-direction:column;}
-#dev-list{overflow-y:auto;max-height:55vh;padding-right:4px;}
-#dev-modal h3{color:var(--c);font-size:12px;letter-spacing:3px;margin-bottom:14px;}
-.dev-item{padding:9px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:10px;color:var(--txt);letter-spacing:1px;transition:all .13s;display:flex;align-items:center;gap:8px;}
+#dev-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#23272f;border:2px solid var(--c);border-radius:10px;padding:20px 24px;z-index:9999;min-width:380px;max-width:540px;max-height:85vh;font-family:'Courier New',monospace;flex-direction:column;gap:6px;}
+#dev-modal h3{color:var(--c);font-size:12px;letter-spacing:3px;margin-bottom:6px;flex-shrink:0;}
+.dev-sec-title{font-size:8px;letter-spacing:3px;color:var(--c);margin:4px 0 3px;border-bottom:1px solid var(--border);padding-bottom:3px;flex-shrink:0;}
+.dev-sec-title.sys-title{color:var(--m);}
+.dev-scroll{overflow-y:auto;max-height:20vh;padding-right:4px;flex-shrink:0;}
+.dev-item{padding:8px 12px;margin-bottom:4px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:10px;color:var(--txt);letter-spacing:1px;transition:all .13s;display:flex;align-items:center;gap:8px;}
 .dev-item:hover{border-color:var(--c);color:var(--hi);background:#0e2a30;}
-.dev-item.default-dev{border-color:#4ade80;color:#4ade80;}
-.dev-badge{font-size:8px;padding:1px 6px;border-radius:8px;background:#0e2a30;color:var(--c);border:1px solid var(--c);white-space:nowrap;}
-#dev-cancel{margin-top:10px;font-size:9px;color:var(--txt);text-align:center;cursor:pointer;letter-spacing:1px;}
+.dev-item.sel-mic{border-color:var(--c);color:var(--c);background:#0a2028;}
+.dev-item.sel-sys{border-color:var(--m);color:var(--m);background:#1a0a2e;}
+.dev-item.default-dev{border-color:#4ade80;}
+.dev-item.none-item{border-color:#f87171;color:#f87171;}
+.dev-item.none-item:hover{background:#2a0a0a;border-color:#f87171;}
+.dev-badge{font-size:8px;padding:1px 6px;border-radius:8px;background:#0e2a30;color:var(--c);border:1px solid var(--c);white-space:nowrap;flex-shrink:0;}
+.dev-badge.sys-badge{background:#1a0a2e;color:var(--m);border-color:var(--m);}
+#dev-status-line{font-size:9px;color:var(--txt);text-align:center;min-height:14px;flex-shrink:0;}
+#dev-start{background:#0e2a30;border:1px solid var(--c);color:var(--c);padding:8px;border-radius:5px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:2px;width:100%;text-align:center;transition:all .13s;flex-shrink:0;}
+#dev-start:hover{background:#1a4050;}
+#dev-cancel{font-size:9px;color:var(--txt);text-align:center;cursor:pointer;letter-spacing:1px;flex-shrink:0;}
 #dev-cancel:hover{color:var(--hi);}
-#dev-perm-warn{font-size:9px;color:var(--y);margin-bottom:10px;display:none;}
+#dev-perm-warn{font-size:9px;color:var(--y);display:none;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -294,8 +304,23 @@ select:focus{outline:none;border-color:var(--c);}
 <!-- 입력 장치 선택 모달 -->
 <div id="dev-modal">
   <h3>INPUT DEVICE SELECT</h3>
-  <div id="dev-perm-warn">⚠ 장치 목록을 읽는 중... 잠시 기다려 주세요</div>
-  <div id="dev-list"></div>
+  <div id="dev-perm-warn">⚠ 장치 목록 로딩 중...</div>
+
+  <!-- 선택 안 함 -->
+  <div class="dev-item none-item" id="dev-none-btn">
+    ✕ &nbsp;선택 안 함 (연결 해제)
+  </div>
+
+  <!-- 마이크 섹션 -->
+  <div class="dev-sec-title">🎤 마이크 입력</div>
+  <div class="dev-scroll" id="dev-mic-list"></div>
+
+  <!-- 시스템 사운드 섹션 -->
+  <div class="dev-sec-title sys-title">🖥 시스템 사운드</div>
+  <div class="dev-scroll" id="dev-sys-list"></div>
+
+  <div id="dev-status-line">마이크 또는 시스템 사운드를 선택하세요 (복수 선택 가능)</div>
+  <button id="dev-start" disabled>시작</button>
   <div id="dev-cancel" onclick="closeDevModal()">취소</div>
 </div>
 
@@ -638,56 +663,122 @@ function drawScope(td){
 // ── WebSocket 시스템 오디오 ──────────────────────────────────────────────
 let sysWs=null, wsMode=false, wsLastFft=null;
 
+// 선택 상태 (id 또는 null)
+let _selMic=null, _selSys=null;
+
 async function openDevModal(){
+  _selMic=null; _selSys=null;
   document.getElementById('dev-modal').style.display='flex';
   document.getElementById('dev-perm-warn').style.display='block';
-  document.getElementById('dev-list').innerHTML='';
+  document.getElementById('dev-mic-list').innerHTML='';
+  document.getElementById('dev-sys-list').innerHTML='';
+  document.getElementById('dev-start').disabled=true;
+  document.getElementById('dev-status-line').textContent='장치 목록 로딩 중...';
+
+  // 선택 안 함 버튼
+  document.getElementById('dev-none-btn').onclick=()=>{
+    closeDevModal(); disconnectSysWs(); setBtn(null); setStat('정지됨');
+    if(aid){ cancelAnimationFrame(aid); aid=null; }
+  };
+
   try{
-    const resp=await fetch('/api/audio/devices');
+    const resp=await fetch('/api/audio/devices2');
     const json=await resp.json();
     document.getElementById('dev-perm-warn').style.display='none';
     if(json.error){
-      document.getElementById('dev-list').innerHTML=`<div style="color:var(--r);font-size:10px">오류: ${json.error}<br><br>pip install sounddevice numpy</div>`;
+      document.getElementById('dev-status-line').textContent='오류: '+json.error;
       return;
     }
     if(!json.devices||!json.devices.length){
-      document.getElementById('dev-list').innerHTML='<div style="color:var(--y);font-size:10px">입력 장치 없음</div>';
+      document.getElementById('dev-status-line').textContent='입력 장치 없음';
       return;
     }
-    const list=document.getElementById('dev-list');
-    json.devices.forEach(d=>{
-      const el=document.createElement('div');
-      el.className='dev-item'+(d.is_default?' default-dev':'');
-      el.innerHTML=`<span style="flex:1">${d.name}</span>`
-        +(d.is_default?'<span class="dev-badge">DEFAULT</span>':'')
-        +`<span style="font-size:8px;color:#5a6070;margin-left:6px">${d.channels}ch ${d.sample_rate}Hz</span>`;
-      el.addEventListener('click',()=>{ closeDevModal(); connectSysAudio(d.id, d.name, d.sample_rate); });
-      list.appendChild(el);
-    });
+
+    const mics=json.devices.filter(d=>d.type==='mic');
+    const syss=json.devices.filter(d=>d.type==='system');
+
+    function buildList(devs, listId, selKey, badgeCls){
+      const container=document.getElementById(listId);
+      if(!devs.length){
+        container.innerHTML=`<div style="font-size:9px;color:var(--txt);padding:4px 0">장치 없음</div>`;
+        return;
+      }
+      devs.forEach(d=>{
+        const el=document.createElement('div');
+        el.id=`dev-item-${d.id}`;
+        el.className='dev-item'+(d.is_default?' default-dev':'');
+        el.innerHTML=`<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.name}</span>`
+          +(d.is_default?`<span class="dev-badge ${badgeCls}">DEFAULT</span>`:'')
+          +`<span style="font-size:8px;color:#5a6070;flex-shrink:0">${d.channels}ch ${d.sample_rate}Hz</span>`;
+        el.addEventListener('click',()=>{
+          // 토글 선택
+          if(selKey==='mic'){
+            _selMic=(_selMic===d.id)?null:d.id;
+            document.querySelectorAll('#dev-mic-list .dev-item').forEach(x=>x.classList.remove('sel-mic'));
+            if(_selMic!==null) el.classList.add('sel-mic');
+          } else {
+            _selSys=(_selSys===d.id)?null:d.id;
+            document.querySelectorAll('#dev-sys-list .dev-item').forEach(x=>x.classList.remove('sel-sys'));
+            if(_selSys!==null) el.classList.add('sel-sys');
+          }
+          updateDevStatus();
+        });
+        container.appendChild(el);
+      });
+    }
+
+    buildList(mics,'dev-mic-list','mic','');
+    buildList(syss,'dev-sys-list','sys','sys-badge');
+    updateDevStatus();
+
   }catch(e){
     document.getElementById('dev-perm-warn').style.display='none';
-    document.getElementById('dev-list').innerHTML=`<div style="color:var(--r);font-size:10px">서버 오류: ${e.message}</div>`;
+    document.getElementById('dev-status-line').textContent='서버 오류: '+e.message;
   }
 }
 
-function closeDevModal(){ document.getElementById('dev-modal').style.display='none'; wsMode||setBtn(null); }
+function updateDevStatus(){
+  const parts=[];
+  if(_selMic!==null) parts.push('🎤 마이크');
+  if(_selSys!==null) parts.push('🖥 시스템 사운드');
+  const hasAny=parts.length>0;
+  document.getElementById('dev-start').disabled=!hasAny;
+  document.getElementById('dev-status-line').textContent=
+    hasAny ? parts.join(' + ')+' 선택됨' : '마이크 또는 시스템 사운드를 선택하세요';
+}
+
+function closeDevModal(){
+  document.getElementById('dev-modal').style.display='none';
+  if(!wsMode) setBtn(null);
+}
 
 function disconnectSysWs(){
   if(sysWs){ try{sysWs.close();}catch(e){} sysWs=null; }
   wsMode=false; wsLastFft=null;
 }
 
-async function connectSysAudio(deviceId, deviceName, sr){
+async function connectSysAudio(micId, sysId){
   disconnectSysWs();
-  setStat(`연결 중: ${deviceName}...`);
-  const url=`ws://${location.host}/ws/audio?device_id=${deviceId}`;
+  const params=new URLSearchParams();
+  if(micId!=null) params.set('device_id', micId);
+  if(sysId!=null) params.set('mix_device_id', sysId);
+  // device_id 없고 sys만 있으면 sys를 primary로
+  if(micId==null && sysId!=null){
+    params.set('device_id', sysId);
+    params.delete('mix_device_id');
+  }
+  const label=[];
+  if(micId!=null) label.push('마이크');
+  if(sysId!=null) label.push('시스템');
+  setStat('연결 중: '+label.join('+')+'...');
+  const url=`ws://${location.host}/ws/audio?${params}`;
   sysWs=new WebSocket(url);
   sysWs.onmessage=e=>{
     const msg=JSON.parse(e.data);
     if(msg.type==='ready'){
       wsMode=true;
       setBtn('bMic');
-      setStat(`시스템 입력: ${deviceName} | ${msg.sr}Hz`);
+      setStat('시스템 입력: '+label.join(' + ')+' | '+msg.sr+'Hz');
       if(!aid) loop();
     } else if(msg.type==='fft'){
       const gain=parseInt(document.getElementById('gn').value)/10;
@@ -703,6 +794,14 @@ async function connectSysAudio(deviceId, deviceName, sr){
   sysWs.onerror=()=>{ setStat('WebSocket 연결 오류'); disconnectSysWs(); };
   sysWs.onclose=()=>{ if(wsMode){ setStat('시스템 오디오 연결 끊김'); disconnectSysWs(); } };
 }
+
+// 시작 버튼
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('dev-start').addEventListener('click',()=>{
+    closeDevModal();
+    connectSysAudio(_selMic, _selSys);
+  });
+});
 
 // ── 메인 루프 ────────────────────────────────────────────────────────────────
 let aid=null;
@@ -870,9 +969,10 @@ document.getElementById('bStop').addEventListener('click',()=>{
   if(aid){ cancelAnimationFrame(aid); aid=null; }
 });
 
-// 시스템 오디오
+// 시스템 오디오 버튼 → 장치 선택 모달 (마이크와 동일)
 document.getElementById('bSys').addEventListener('click',()=>{
-  document.getElementById('guide').style.display='block';
+  stopSrc(); disconnectSysWs();
+  openDevModal();
 });
 
 async function doCapture(){
