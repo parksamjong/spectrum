@@ -145,22 +145,38 @@ async def get_audio_devices2():
 
 # ── 내부 helper: FFT 계산 ────────────────────────────────────────────────────
 
-def _make_fft(data: np.ndarray, hann: np.ndarray, block: int) -> np.ndarray:
+def _raw_fft(data: np.ndarray, hann: np.ndarray, block: int) -> np.ndarray:
+    """Hann 윈도우 적용 후 선형 FFT 크기 반환 (노이즈 처리 전)"""
     mono = data.mean(axis=1) if data.ndim > 1 else data.ravel()
     if len(mono) < block:
         mono = np.pad(mono, (0, block - len(mono)))
-    fft = np.abs(np.fft.rfft(mono[:block] * hann))[: block // 2]
+    return np.abs(np.fft.rfft(mono[:block] * hann))[: block // 2]
+
+def _normalize_fft(fft: np.ndarray) -> np.ndarray:
+    """선형 FFT → dB → 0~1 정규화"""
     fft_db = 20.0 * np.log10(fft + 1e-9)
     return np.clip((fft_db + 80.0) / 80.0, 0.0, 1.0).astype(np.float32)
+
+def _make_fft(data: np.ndarray, hann: np.ndarray, block: int,
+              noise_floor: 'np.ndarray | None' = None,
+              noise_strength: float = 2.0) -> np.ndarray:
+    """FFT + 스펙트럴 서브트랙션 + 정규화"""
+    fft = _raw_fft(data, hann, block)
+    if noise_floor is not None:
+        # 과감산(oversubtraction) + 스펙트럴 플로어 0.01 유지
+        fft = np.maximum(fft - noise_strength * noise_floor, 0.01 * fft)
+    return _normalize_fft(fft)
 
 
 # ── System audio: WebSocket FFT stream ───────────────────────────────────────
 
 @app.websocket("/ws/audio")
-async def audio_ws(websocket: WebSocket, device_id: int = -1, mix_device_id: int = -1):
+async def audio_ws(websocket: WebSocket, device_id: int = -1, mix_device_id: int = -1,
+                   noise_reduce: float = 2.0):
     """
     device_id     : 주 입력 장치 (마이크 or 시스템 사운드)
     mix_device_id : 추가 혼합 장치 (시스템 사운드 or 마이크)  -1이면 단일 장치
+    noise_reduce  : 스펙트럴 서브트랙션 강도 (0=끔, 2=기본, 4=최대)
     두 FFT는 element-wise max 로 합성
     """
     await websocket.accept()
@@ -234,6 +250,11 @@ async def audio_ws(websocket: WebSocket, device_id: int = -1, mix_device_id: int
             sec_q  = q2 if (use_primary and use_mix) else None
             last_sec = np.zeros(BLOCK // 2, dtype=np.float32)
 
+            # 노이즈 플로어 추정 (초기 N프레임의 선형 FFT를 수집)
+            NOISE_EST_FRAMES = 25          # ~1.2 초
+            noise_est_buf: list = []
+            noise_floor: np.ndarray | None = None
+
             while True:
                 try:
                     raw1 = await asyncio.wait_for(main_q.get(), timeout=2.0)
@@ -244,7 +265,23 @@ async def audio_ws(websocket: WebSocket, device_id: int = -1, mix_device_id: int
                         break
                     continue
 
-                fft_main = _make_fft(raw1, hann, BLOCK)
+                # 선형 FFT 크기
+                lin1 = _raw_fft(raw1, hann, BLOCK)
+
+                # 노이즈 플로어 추정 단계
+                if noise_reduce > 0 and noise_floor is None:
+                    noise_est_buf.append(lin1.copy())
+                    if len(noise_est_buf) >= NOISE_EST_FRAMES:
+                        # 하위 30th percentile → 잡음 플로어 추정
+                        noise_floor = np.percentile(
+                            np.stack(noise_est_buf), 30, axis=0
+                        ).astype(np.float32)
+                    # 추정 중에는 노이즈 감소 없이 그냥 정규화
+                    fft_main = _normalize_fft(lin1)
+                else:
+                    fft_main = _make_fft(raw1, hann, BLOCK,
+                                         noise_floor=noise_floor if noise_reduce > 0 else None,
+                                         noise_strength=noise_reduce)
 
                 # 보조 장치 FFT (가장 최신 프레임 사용)
                 if sec_q is not None:

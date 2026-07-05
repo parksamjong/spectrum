@@ -181,6 +181,7 @@ select:focus{outline:none;border-color:var(--c);}
       <span class="rv" id="vgn">20</span>
     </div>
     <div class="row"><label>LEVEL</label><input type="range" id="lv" min="0" max="300" value="100" step="5"><span class="rv" id="vlv">100%</span></div>
+    <div class="row"><label>NOISE</label><input type="range" id="nf" min="0" max="100" value="50" step="5"><span class="rv" id="vnf">50</span></div>
     <div class="row"><label>MIN dB</label><input type="range" id="md" min="-120" max="-40" value="-100" step="5"><span class="rv" id="vmd">-100</span></div>
     <div class="row"><label>MODE</label>
       <select id="sm2">
@@ -377,7 +378,7 @@ resize();
 new ResizeObserver(resize).observe(document.getElementById('main'));
 
 // 슬라이더 라이브 라벨
-[['sm','vsm'],['gn','vgn'],['md','vmd'],['tl','vtl'],['lw','vlw'],['sg','vsg']].forEach(([id,vid])=>{
+[['sm','vsm'],['gn','vgn'],['md','vmd'],['tl','vtl'],['lw','vlw'],['sg','vsg'],['nf','vnf']].forEach(([id,vid])=>{
   const el=document.getElementById(id), lb=document.getElementById(vid);
   if(el&&lb) el.addEventListener('input',()=>lb.textContent=el.value);
 });
@@ -773,6 +774,9 @@ async function connectSysAudio(micId, sysId){
     params.set('device_id', sysId);
     params.delete('mix_device_id');
   }
+  // 노이즈 감소 강도 (슬라이더 0~100 → 0.0~4.0)
+  const noiseVal=parseInt(document.getElementById('nf').value)/25;
+  if(noiseVal>0) params.set('noise_reduce', noiseVal.toFixed(2));
   const label=[];
   if(micId!=null) label.push('마이크');
   if(sysId!=null) label.push('시스템');
