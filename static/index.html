@@ -180,6 +180,7 @@ select:focus{outline:none;border-color:var(--c);}
       </select>
       <span class="rv" id="vgn">20</span>
     </div>
+    <div class="row"><label>LEVEL</label><input type="range" id="lv" min="0" max="300" value="100" step="5"><span class="rv" id="vlv">100%</span></div>
     <div class="row"><label>MIN dB</label><input type="range" id="md" min="-120" max="-40" value="-100" step="5"><span class="rv" id="vmd">-100</span></div>
     <div class="row"><label>MODE</label>
       <select id="sm2">
@@ -380,6 +381,11 @@ new ResizeObserver(resize).observe(document.getElementById('main'));
   const el=document.getElementById(id), lb=document.getElementById(vid);
   if(el&&lb) el.addEventListener('input',()=>lb.textContent=el.value);
 });
+// LEVEL 슬라이더 — % 단위 표시
+(function(){
+  const el=document.getElementById('lv'), lb=document.getElementById('vlv');
+  if(el&&lb) el.addEventListener('input',()=>lb.textContent=el.value+'%');
+})();
 
 // 팔레트 — spectrum_analyzer.html 동일
 function gc(i,a=1,l=48){
@@ -782,8 +788,9 @@ async function connectSysAudio(micId, sysId){
       if(!aid) loop();
     } else if(msg.type==='fft'){
       const gain=parseInt(document.getElementById('gn').value)/10;
+      const level=parseInt(document.getElementById('lv').value)/100;
       const fftArr=new Float32Array(msg.d.length);
-      for(let i=0;i<msg.d.length;i++) fftArr[i]=Math.min(1,msg.d[i]*gain);
+      for(let i=0;i<msg.d.length;i++) fftArr[i]=Math.min(1,msg.d[i]*gain*level);
       wsLastFft={fft:fftArr, rms:msg.rms};
       lastRmsGlobal=msg.rms;
     } else if(msg.type==='error'){
@@ -829,8 +836,9 @@ function loop(){
   const td=new Uint8Array(an.fftSize);
   an.getByteFrequencyData(fd); an.getByteTimeDomainData(td);
   const gain=parseInt(document.getElementById('gn').value)/10;
+  const level=parseInt(document.getElementById('lv').value)/100;
   const v=bands(fd,actx.sampleRate);
-  for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain);
+  for(let i=0;i<NUM;i++) v[i]=Math.min(1,v[i]*gain*level);
   lastVals=v;
   drawSpec(v); drawScope(td);
 }
